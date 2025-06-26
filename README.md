@@ -2,7 +2,7 @@
    <img src="public/bloom_logo.png" alt="Bloom Framework Logo" width="200" />
 </p>
 
-# 🌸 Bloom Framework
+# Bloom Framework
 
 **Feature-modular frontend framework with contracts, Redux, and LLM-accelerated development.**
 
