@@ -1,0 +1,52 @@
+/**
+ * Bloom Framework - Minimal global styles (UIKit theme system handles most styling)
+ * @module @voilajsx/bloom
+ * @file src/assets/styles/globals.css
+ */
+
+@import "tailwindcss";
+
+/* Bloom-specific animations only (UIKit handles theme colors) */
+@keyframes bloom-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes bloom-slide-up {
+  from {
+    transform: translateY(20px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+/* Bloom animation utilities */
+.animate-bloom-fade-in {
+  animation: bloom-fade-in 300ms ease-out;
+}
+
+.animate-bloom-slide-up {
+  animation: bloom-slide-up 300ms ease-out;
+}
+
+/* Animation delays for staggered effects */
+.delay-100 { animation-delay: 100ms; }
+.delay-200 { animation-delay: 200ms; }
+.delay-300 { animation-delay: 300ms; }
+
+/* Reduced motion preferences */
+@media (prefers-reduced-motion: reduce) {
+  .animate-bloom-fade-in,
+  .animate-bloom-slide-up {
+    animation: none;
+  }
+}

@@ -1,0 +1,16 @@
+/* TEAM */
+Developer: Your Name
+Contact: hello [at] bloom-framework.dev
+From: Earth
+
+/* THANKS */
+Framework: Bloom Framework
+UI Library: @voilajsx/uikit
+Build Tool: Vite
+CSS: Tailwind CSS
+
+/* SITE */
+Last update: 6/26/2025
+Language: English
+Doctype: HTML5
+IDE: Your favorite editor
