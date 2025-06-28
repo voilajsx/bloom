@@ -9,7 +9,7 @@ import { BrowserRouter } from 'react-router-dom';
 import { Provider as ReduxProvider } from 'react-redux';
 import { BloomRouter } from './router';
 import { useFeatureDiscovery } from './discovery';
-import { initializeStore, getStore } from './state';
+import { initializeStore, getStore, addSlice, createSliceFromTemplate } from './state';
 import { getContractSummary } from './contracts';
 import defaults from '@/defaults';
 
@@ -67,11 +67,16 @@ export function BloomApp() {
   const basename = getReactRouterBasename();
   const { features, routes, contracts, loading, error } = useFeatureDiscovery();
 
-  // Initialize Redux store
+  // Initialize Redux store and core slices
   React.useEffect(() => {
     try {
+      // Initialize store
       initializeStore();
-      console.log('🌸 Bloom: Redux store initialized');
+      
+      // Add core storage slice for useBloomStorage
+      addSlice(createSliceFromTemplate('STORAGE', 'storage'));
+      
+      console.log('🌸 Bloom: Redux store initialized with core slices');
     } catch (error) {
       console.error('🌸 Bloom: Failed to initialize Redux store:', error);
     }
@@ -122,7 +127,8 @@ export function initializeBloom() {
     ssgEnabled: defaults['ssg-enabled'],
     cachingEnabled: defaults['enable-caching'],
     contractsEnabled: true,
-    reduxEnabled: true
+    reduxEnabled: true,
+    storageEnabled: true
   });
   
   return BloomApp;

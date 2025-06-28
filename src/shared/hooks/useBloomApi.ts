@@ -1,7 +1,7 @@
 /**
  * Shared API Hook - Unified API interface with caching and error handling
  * @module @voilajsx/bloom/shared
- * @file src/shared/hooks/useApi.ts
+ * @file src/shared/hooks/useBloomApi.ts
  */
 
 import { useState, useCallback } from 'react';
@@ -26,7 +26,7 @@ interface ApiOptions {
 // Simple in-memory cache
 const apiCache = new Map<string, { data: any; timestamp: number; expiry: number }>();
 
-export function useApi() {
+export function useBloomApi() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 

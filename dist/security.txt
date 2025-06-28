@@ -1,5 +1,0 @@
-Contact: mailto:security@bloom-framework.dev
-Expires: 2026-06-26T07:43:00.005Z
-Preferred-Languages: en
-Canonical: https://github.com/voilajsx/bloom/security.txt
-Policy: https://github.com/voilajsx/bloom/security-policy

@@ -1,12 +1,12 @@
 /**
- * Quotes Feature - Pure Advice Slip API (no fallback)
+ * Quotes Feature - Pure Advice Slip API with Redux Storage
  * @module @voilajsx/bloom/features/quotes
  * @file src/features/quotes/hooks/useQuotes.ts
  */
 
 import { useState, useEffect, useCallback } from 'react';
 import { useBloomStorage } from '@/shared/hooks/useBloomStorage';
-import { useApi } from '@/shared/hooks/useApi';
+import { useBloomApi } from '@/shared/hooks/useBloomApi';
 
 interface Quote {
   id: string;
@@ -30,8 +30,8 @@ interface LoadingState {
 }
 
 export function useQuotes() {
-  const { get, set } = useBloomStorage();
-  const { apiGet } = useApi();
+  const { get, set, isReady } = useBloomStorage();
+  const { apiGet } = useBloomApi();
 
   // State management
   const [quotes, setQuotes] = useState<Quote[]>([]);
@@ -50,13 +50,15 @@ export function useQuotes() {
   });
   const [error, setError] = useState<string | null>(null);
 
-  // Load initial data
+  // Load initial data when storage is ready
   useEffect(() => {
+    if (!isReady) return;
+    
     loadSettings();
     loadFavorites();
     loadQuotes();
     loadFeaturedQuote();
-  }, []);
+  }, [isReady]);
 
   // Auto-refresh setup
   useEffect(() => {
@@ -189,8 +191,8 @@ export function useQuotes() {
     }
   }, [settings.quotesPerPage]);
 
-  // Update setting
-  const updateSetting = async <K extends keyof QuotesSettings>(
+  // Update setting with persistence
+  const updateSetting = useCallback(async <K extends keyof QuotesSettings>(
     key: K,
     value: QuotesSettings[K]
   ) => {
@@ -206,10 +208,10 @@ export function useQuotes() {
       console.error(`[Quotes] Failed to update ${key}:`, error);
       setSettings(prev => ({ ...prev, [key]: settings[key] }));
     }
-  };
+  }, [set]);
 
-  // Toggle favorite quote
-  const toggleFavorite = async (quoteId: string) => {
+  // Toggle favorite quote with persistence
+  const toggleFavorite = useCallback(async (quoteId: string) => {
     try {
       const newFavorites = favorites.includes(quoteId)
         ? favorites.filter(id => id !== quoteId)
@@ -219,8 +221,10 @@ export function useQuotes() {
       await set('quotes.favorites', newFavorites);
     } catch (error) {
       console.error('[Quotes] Failed to update favorites:', error);
+      // Revert on failure
+      setFavorites(favorites);
     }
-  };
+  }, [favorites, set]);
 
   // Share quote
   const shareQuote = async (quote: Quote) => {
@@ -253,9 +257,33 @@ export function useQuotes() {
   };
 
   // Get favorite quotes
-  const getFavorites = () => {
+  const getFavorites = useCallback(() => {
     return quotes.filter(quote => favorites.includes(quote.id));
-  };
+  }, [quotes, favorites]);
+
+  // Clear all favorites
+  const clearFavorites = useCallback(async () => {
+    try {
+      setFavorites([]);
+      await set('quotes.favorites', []);
+    } catch (error) {
+      console.error('[Quotes] Failed to clear favorites:', error);
+    }
+  }, [set]);
+
+  // Export favorites to JSON
+  const exportFavorites = useCallback(() => {
+    const favoriteQuotes = getFavorites();
+    const dataStr = JSON.stringify(favoriteQuotes, null, 2);
+    const dataBlob = new Blob([dataStr], { type: 'application/json' });
+    
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(dataBlob);
+    link.download = 'bloom-favorite-quotes.json';
+    link.click();
+    
+    URL.revokeObjectURL(link.href);
+  }, [getFavorites]);
 
   return {
     // State
@@ -271,9 +299,11 @@ export function useQuotes() {
     updateSetting,
     toggleFavorite,
     shareQuote,
+    clearFavorites,
+    exportFavorites,
 
     // Utilities
     getFavorites,
-    isReady: !loading.quotes && !loading.featured
+    isReady: !loading.quotes && !loading.featured && isReady
   };
 }

@@ -1,5 +1,5 @@
 /**
- * Bloom Framework - Complete Fixed Router
+ * Bloom Framework - Cleaned Router with Feature-only Layout Control
  * @module @voilajsx/bloom/platform
  * @file src/platform/router.ts
  */
@@ -7,12 +7,8 @@
 import React, { useMemo, useEffect } from 'react';
 import { Routes, Route, useLocation, useNavigate } from 'react-router-dom';
 import { BlankLayout } from '@voilajsx/uikit/blank';
-import { PageLayout } from '@voilajsx/uikit/page';
-import { AdminLayout } from '@voilajsx/uikit/admin';
-import { AuthLayout } from '@voilajsx/uikit/auth';
-import { PopupLayout } from '@voilajsx/uikit/popup';
 import { Button } from '@voilajsx/uikit/button';
-import { AlertTriangle, Home, Info, Mail, Quote } from 'lucide-react';
+import { AlertTriangle, Home } from 'lucide-react';
 import type {
   BloomCompiledRoute,
   BloomFeatureRegistry,
@@ -22,127 +18,24 @@ import {
   getRouteByPath,
   extractRouteParams
 } from './discovery';
-import defaults, { getBasePath } from '@/defaults';
-
-// Icon mapping
-const iconMap: Record<string, React.ComponentType> = {
-  Home,
-  Info,
-  Mail,
-  Quote,
-};
-
-// Get layout type from path
-function getLayoutType(pathname: string): 'page' | 'admin' | 'auth' | 'blank' | 'popup' {
-  const basePath = getBasePath();
-  const path = basePath !== '/' && pathname.startsWith(basePath) 
-    ? pathname.slice(basePath.length - 1) || '/'
-    : pathname;
-  
-  const layoutRoutes = defaults['layout-routes'] || {};
-  
-  // Check exact matches first
-  for (const [layoutType, routes] of Object.entries(layoutRoutes)) {
-    if (Array.isArray(routes)) {
-      for (const route of routes) {
-        if (route !== '/*' && !route.endsWith('*')) {
-          if (path === route) return layoutType as any;
-        }
-      }
-    }
-  }
-  
-  // Check prefix matches
-  for (const [layoutType, routes] of Object.entries(layoutRoutes)) {
-    if (Array.isArray(routes)) {
-      for (const route of routes) {
-        if (route.endsWith('*')) {
-          if (path.startsWith(route.slice(0, -1))) return layoutType as any;
-        }
-      }
-    }
-  }
-  
-  // Check wildcard
-  for (const [layoutType, routes] of Object.entries(layoutRoutes)) {
-    if (Array.isArray(routes) && routes.includes('/*')) {
-      return layoutType as any;
-    }
-  }
-  
-  return 'page';
-}
-
-// Get navigation items with proper active state
-function getNavigation(currentPath: string) {
-  const basePath = getBasePath();
-  return [...defaults['navigation-items']].map(item => ({
-    key: item.key,
-    label: item.label,
-    href: basePath !== '/' ? `${basePath.replace(/\/$/, '')}${item.href}` : item.href,
-    icon: item.icon ? iconMap[item.icon] : undefined,
-    isActive: currentPath === (basePath !== '/' ? `${basePath.replace(/\/$/, '')}${item.href}` : item.href),
-  }));
-}
+import { BloomLayoutWrapper } from './layout';
+import defaults from '@/defaults';
 
 /**
- * Stable layout wrapper
+ * Get layout for a route - simplified to feature-only control
  */
-function StableLayoutWrapper({ children }: { children: React.ReactNode }) {
-  const location = useLocation();
-  const navigate = useNavigate();
-  const layoutType = getLayoutType(location.pathname);
-  const navigation = getNavigation(location.pathname);
-  
-  const layoutProps = {
-    scheme: 'default' as const,
-    tone: 'clean' as const,
-    size: 'xl' as const,
-    title: defaults['app-name'] || 'Bloom App',
-    navigation,
-    currentPath: location.pathname,
-    onNavigate: (href: string) => {
-      navigate(href);
-    },
-    children
-  };
-
-  switch (layoutType) {
-    case 'admin':
-      return React.createElement(AdminLayout, {
-        ...layoutProps,
-        scheme: 'sidebar' as const,
-        tone: 'subtle' as const,
-        size: 'lg' as const,
-      });
-
-    case 'auth':
-      return React.createElement(AuthLayout, {
-        ...layoutProps,
-        scheme: 'card' as const,
-        size: 'md' as const,
-      });
-
-    case 'blank':
-      return React.createElement(BlankLayout, {
-        ...layoutProps,
-        size: 'lg' as const,
-      });
-
-    case 'popup':
-      return React.createElement(PopupLayout, {
-        ...layoutProps,
-        scheme: 'modal' as const,
-        size: 'md' as const,
-      });
-
-    default: // 'page'
-      return React.createElement(PageLayout, layoutProps);
-  }
+function getRouteLayout(route: BloomCompiledRoute): 'page' | 'admin' | 'auth' | 'blank' | 'popup' {
+  // Use route-specified layout or default to 'page'
+  const layoutType = route.layout && route.layout !== 'default' 
+    ? route.layout 
+    : (defaults['default-layout'] || 'page');
+    
+  console.log(`🎯 Route layout: ${route.path} → ${layoutType} (from feature config)`);
+  return layoutType as any;
 }
 
 /**
- * Route renderer
+ * Route renderer with layout wrapper
  */
 function RouteRenderer({ 
   route, 
@@ -185,9 +78,19 @@ function RouteRenderer({
         });
       }
       
-      return React.createElement('div', {
+      // Determine layout from feature config
+      const layoutType = getRouteLayout(route);
+      
+      // Create the component content
+      const componentContent = React.createElement('div', {
         className: 'animate-bloom-fade-in'
       }, React.createElement(Component, params));
+      
+      // Wrap component in layout wrapper
+      return React.createElement(BloomLayoutWrapper, {
+        layout: layoutType,
+        children: componentContent
+      });
     };
   }, [route.id]);
   
@@ -201,7 +104,7 @@ function RouteError({ route, error }: { route: BloomCompiledRoute; error?: strin
   const navigate = useNavigate();
 
   return React.createElement(BlankLayout, {
-    scheme: 'error',
+    scheme: 'simple',
     tone: 'clean',
     size: 'lg',
     children: React.createElement('div', {
@@ -237,54 +140,54 @@ function RouteError({ route, error }: { route: BloomCompiledRoute; error?: strin
 function NotFoundPage() {
   const navigate = useNavigate();
 
-  return React.createElement(BlankLayout, {
-    scheme: 'error',
-    tone: 'clean',
-    size: 'lg',
-    children: React.createElement('div', {
-      className: 'text-center space-y-8 animate-bloom-fade-in'
+  const pageContent = React.createElement('div', {
+    className: 'text-center space-y-8 animate-bloom-fade-in'
+  }, [
+    React.createElement('div', {
+      key: 'header',
+      className: 'space-y-4'
     }, [
       React.createElement('div', {
-        key: 'header',
-        className: 'space-y-4'
+        key: 'icon',
+        className: 'text-8xl'
+      }, '🌸'),
+      React.createElement('h1', {
+        key: 'title',
+        className: 'text-6xl font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent'
+      }, '404'),
+      React.createElement('p', {
+        key: 'desc',
+        className: 'text-xl text-muted-foreground'
+      }, 'Page not found')
+    ]),
+    React.createElement('div', {
+      key: 'actions',
+      className: 'flex gap-3 justify-center'
+    }, [
+      React.createElement(Button, {
+        key: 'home',
+        onClick: () => navigate('/'),
+        className: 'flex items-center gap-2'
       }, [
-        React.createElement('div', {
-          key: 'icon',
-          className: 'text-8xl'
-        }, '🌸'),
-        React.createElement('h1', {
-          key: 'title',
-          className: 'text-6xl font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent'
-        }, '404'),
-        React.createElement('p', {
-          key: 'desc',
-          className: 'text-xl text-muted-foreground'
-        }, 'Page not found')
+        React.createElement(Home, { key: 'icon', className: 'w-4 h-4' }),
+        'Go Home'
       ]),
-      React.createElement('div', {
-        key: 'actions',
-        className: 'flex gap-3 justify-center'
-      }, [
-        React.createElement(Button, {
-          key: 'home',
-          onClick: () => navigate('/'),
-          className: 'flex items-center gap-2'
-        }, [
-          React.createElement(Home, { key: 'icon', className: 'w-4 h-4' }),
-          'Go Home'
-        ]),
-        React.createElement(Button, {
-          key: 'back',
-          variant: 'outline',
-          onClick: () => window.history.back()
-        }, 'Go Back')
-      ])
+      React.createElement(Button, {
+        key: 'back',
+        variant: 'outline',
+        onClick: () => window.history.back()
+      }, 'Go Back')
     ])
+  ]);
+
+  return React.createElement(BloomLayoutWrapper, {
+    layout: 'blank',
+    children: pageContent
   });
 }
 
 /**
- * Main Bloom Router
+ * Main Bloom Router - Simplified
  */
 export function BloomRouter({ routes }: BloomRouterConfig) {
   const location = useLocation();
@@ -294,6 +197,20 @@ export function BloomRouter({ routes }: BloomRouterConfig) {
     const route = getRouteByPath(routes, location.pathname);
     if (route?.title) {
       document.title = route.title;
+    }
+  }, [location.pathname, routes]);
+
+  // Simple debugging for feature-based layout
+  useEffect(() => {
+    const route = getRouteByPath(routes, location.pathname);
+    if (route && process.env.NODE_ENV === 'development') {
+      const layoutType = getRouteLayout(route);
+      console.log('🌸 Router Debug:', {
+        path: location.pathname,
+        feature: route.featureName,
+        routeLayout: route.layout,
+        resolvedLayout: layoutType
+      });
     }
   }, [location.pathname, routes]);
 
@@ -315,17 +232,14 @@ export function BloomRouter({ routes }: BloomRouterConfig) {
     return React.createElement('div');
   }
 
-  // Wrap in stable layout
-  return React.createElement(StableLayoutWrapper, {
-    children: React.createElement(Routes, null, [
-      ...reactRoutes,
-      React.createElement(Route, {
-        key: '404',
-        path: '*',
-        element: React.createElement(NotFoundPage)
-      })
-    ])
-  });
+  return React.createElement(Routes, null, [
+    ...reactRoutes,
+    React.createElement(Route, {
+      key: '404',
+      path: '*',
+      element: React.createElement(NotFoundPage)
+    })
+  ]);
 }
 
 /**

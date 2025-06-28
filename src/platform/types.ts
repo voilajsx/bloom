@@ -47,6 +47,36 @@ export interface BloomSharedState {
   middleware?: string[];
 }
 
+// Storage Types (NEW)
+export interface BloomStorageOptions {
+  prefix?: string;
+  fallback?: any;
+  autoHydrate?: boolean;
+}
+
+export interface BloomStorageManager {
+  get<T = any>(key: string, fallback?: T): Promise<T>;
+  set<T = any>(key: string, value: T): Promise<boolean>;
+  remove(key: string): Promise<boolean>;
+  has(key: string): Promise<boolean>;
+  getMultiple<T = any>(keys: string[]): Promise<Record<string, T>>;
+  setMultiple(data: Record<string, any>): Promise<boolean>;
+  getAll(): Promise<Record<string, any>>;
+  clear(): Promise<boolean>;
+  getStorageInfo(): Promise<{
+    itemCount: number;
+    totalSize: number;
+    totalSizeKB: number;
+    prefix: string;
+    reduxItems: number;
+    isHydrated: boolean;
+  }>;
+  isReady: boolean;
+  prefix: string;
+  state: any;
+  dispatch: any;
+}
+
 // Feature Configuration Types
 export interface BloomFeatureConfig {
   name: string;
@@ -190,16 +220,6 @@ export interface BloomPlugin {
   transform?: (code: string, id: string) => string | Promise<string>;
   generateBundle?: (bundle: any) => void | Promise<void>;
   buildEnd?: () => void | Promise<void>;
-}
-
-// Storage Types
-export interface BloomStorageManager {
-  get<T = any>(key: string, fallback?: T): Promise<T>;
-  set<T = any>(key: string, value: T): Promise<boolean>;
-  remove(key: string): Promise<boolean>;
-  has(key: string): Promise<boolean>;
-  clear(): Promise<boolean>;
-  subscribe(key: string, callback: (value: any) => void): () => void;
 }
 
 // API Manager Types

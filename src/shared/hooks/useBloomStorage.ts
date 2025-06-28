@@ -1,61 +1,84 @@
 /**
- * Shared Bloom Storage Hook - Unified storage interface with defaults integration
+ * Bloom Framework - Storage Hook (Redux Wrapper with Auto-Persistence)
  * @module @voilajsx/bloom/shared
  * @file src/shared/hooks/useBloomStorage.ts
  */
 
-import { useCallback } from 'react';
+import { useCallback, useEffect } from 'react';
+import { useBloomState } from './useBloomState';
+import { addSlice, hasSlice } from '@/platform/state';
+import { createSliceFromTemplate } from '@/platform/state';
 import defaults from '@/defaults';
 
 interface StorageOptions {
   prefix?: string;
   fallback?: any;
-  serialize?: boolean;
+  autoHydrate?: boolean;
 }
 
-// Storage event emitter for cross-component updates
-class StorageEventEmitter {
-  private listeners: Map<string, Array<(value: any) => void>> = new Map();
-
-  emit(key: string, value: any) {
-    const callbacks = this.listeners.get(key) || [];
-    callbacks.forEach(callback => callback(value));
-  }
-
-  subscribe(key: string, callback: (value: any) => void) {
-    const callbacks = this.listeners.get(key) || [];
-    callbacks.push(callback);
-    this.listeners.set(key, callbacks);
-
-    // Return unsubscribe function
-    return () => {
-      const updatedCallbacks = (this.listeners.get(key) || []).filter(cb => cb !== callback);
-      this.listeners.set(key, updatedCallbacks);
-    };
-  }
-}
-
-const storageEmitter = new StorageEventEmitter();
-
+/**
+ * Bloom Storage Hook - Simple API with Redux + localStorage persistence
+ */
 export function useBloomStorage(options: StorageOptions = {}) {
-  const { prefix = 'bloom', serialize = true } = options;
+  const { 
+    prefix = 'bloom', 
+    autoHydrate = true 
+  } = options;
 
-  // Get storage key with prefix
-  const getStorageKey = useCallback((key: string) => {
-    return `${prefix}.${key}`;
-  }, [prefix]);
+  // Ensure storage slice exists
+  if (!hasSlice('storage')) {
+    addSlice(createSliceFromTemplate('STORAGE', 'storage'));
+  }
 
- // Get value from storage with defaults fallback
+  const { state, dispatch, isReady } = useBloomState('storage');
+
+  // Hydrate from localStorage on first load
+  useEffect(() => {
+    if (!autoHydrate || !isReady) return;
+
+    const hydrateFromStorage = () => {
+      const storedData: Record<string, any> = {};
+
+      try {
+        // Load all bloom.* keys from localStorage
+        Object.keys(localStorage).forEach(key => {
+          if (key.startsWith(`${prefix}.`)) {
+            const storageKey = key.replace(`${prefix}.`, '');
+            const value = localStorage.getItem(key);
+            if (value !== null) {
+              storedData[storageKey] = JSON.parse(value);
+            }
+          }
+        });
+
+        // Hydrate Redux if we have data
+        if (Object.keys(storedData).length > 0) {
+          dispatch({ type: 'storage/hydrate', payload: storedData });
+          console.log(`[BloomStorage] Hydrated ${Object.keys(storedData).length} items from localStorage`);
+        }
+      } catch (error) {
+        console.error('[BloomStorage] Failed to hydrate from localStorage:', error);
+      }
+    };
+
+    hydrateFromStorage();
+  }, [isReady, autoHydrate, prefix, dispatch]);
+
+  // Get value from Redux state with defaults fallback
   const get = useCallback(async <T = any>(key: string, fallback?: T): Promise<T> => {
     try {
-      const storageKey = getStorageKey(key);
-      const stored = localStorage.getItem(storageKey);
-
-      if (stored !== null) {
-        return serialize ? JSON.parse(stored) as T : stored as T;
+      // First check Redux state
+      if (state && state[key] !== undefined) {
+        return state[key] as T;
       }
 
-      // Check defaults if not in storage
+      // Then check localStorage directly (in case Redux not hydrated yet)
+      const stored = localStorage.getItem(`${prefix}.${key}`);
+      if (stored !== null) {
+        return JSON.parse(stored) as T;
+      }
+
+      // Check defaults configuration
       const defaultValue = (defaults as any)[key];
       if (defaultValue !== undefined) {
         return defaultValue as T;
@@ -78,52 +101,50 @@ export function useBloomStorage(options: StorageOptions = {}) {
 
       return (fallback ?? null) as T;
     }
-  }, [getStorageKey, serialize]);
+  }, [state, prefix]);
 
-  // Set value in storage
+  // Set value in Redux (auto-persists to localStorage via reducer)
   const set = useCallback(async <T = any>(key: string, value: T): Promise<boolean> => {
     try {
-      const storageKey = getStorageKey(key);
-      const serializedValue = serialize ? JSON.stringify(value) : String(value);
-      
-      localStorage.setItem(storageKey, serializedValue);
-      
-      // Emit storage change event
-      storageEmitter.emit(key, value);
-      
+      dispatch({ 
+        type: 'storage/setValue', 
+        payload: { key, value } 
+      });
       return true;
     } catch (error) {
       console.error(`[BloomStorage] Failed to set ${key}:`, error);
       return false;
     }
-  }, [getStorageKey, serialize]);
+  }, [dispatch]);
 
-  // Remove value from storage
+  // Remove value from Redux and localStorage
   const remove = useCallback(async (key: string): Promise<boolean> => {
     try {
-      const storageKey = getStorageKey(key);
-      localStorage.removeItem(storageKey);
-      
-      // Emit removal event
-      storageEmitter.emit(key, undefined);
-      
+      dispatch({ 
+        type: 'storage/removeValue', 
+        payload: key 
+      });
       return true;
     } catch (error) {
       console.error(`[BloomStorage] Failed to remove ${key}:`, error);
       return false;
     }
-  }, [getStorageKey]);
+  }, [dispatch]);
 
-  // Check if key exists in storage
+  // Check if key exists in Redux state
   const has = useCallback(async (key: string): Promise<boolean> => {
     try {
-      const storageKey = getStorageKey(key);
-      return localStorage.getItem(storageKey) !== null;
+      if (state && state[key] !== undefined) {
+        return true;
+      }
+      
+      // Check localStorage as fallback
+      return localStorage.getItem(`${prefix}.${key}`) !== null;
     } catch (error) {
       console.error(`[BloomStorage] Failed to check ${key}:`, error);
       return false;
     }
-  }, [getStorageKey]);
+  }, [state, prefix]);
 
   // Get multiple values at once
   const getMultiple = useCallback(async <T = any>(keys: string[]): Promise<Record<string, T>> => {
@@ -141,65 +162,37 @@ export function useBloomStorage(options: StorageOptions = {}) {
   // Set multiple values at once
   const setMultiple = useCallback(async (data: Record<string, any>): Promise<boolean> => {
     try {
-      await Promise.all(
-        Object.entries(data).map(([key, value]) => set(key, value))
-      );
+      dispatch({ 
+        type: 'storage/setMultiple', 
+        payload: data 
+      });
       return true;
     } catch (error) {
       console.error('[BloomStorage] Failed to set multiple values:', error);
       return false;
     }
-  }, [set]);
+  }, [dispatch]);
 
-  // Clear all storage with prefix
+  // Clear all storage
   const clear = useCallback(async (): Promise<boolean> => {
     try {
-      const keysToRemove: string[] = [];
-      
-      for (let i = 0; i < localStorage.length; i++) {
-        const key = localStorage.key(i);
-        if (key && key.startsWith(`${prefix}.`)) {
-          keysToRemove.push(key);
-        }
-      }
-      
-      keysToRemove.forEach(key => localStorage.removeItem(key));
-      
+      dispatch({ type: 'storage/clearAll' });
       return true;
     } catch (error) {
       console.error('[BloomStorage] Failed to clear storage:', error);
       return false;
     }
-  }, [prefix]);
+  }, [dispatch]);
 
-  // Subscribe to storage changes
-  const subscribe = useCallback((key: string, callback: (value: any) => void) => {
-    return storageEmitter.subscribe(key, callback);
-  }, []);
-
-  // Get all stored data with prefix
+  // Get all stored data
   const getAll = useCallback(async (): Promise<Record<string, any>> => {
     try {
-      const result: Record<string, any> = {};
-      
-      for (let i = 0; i < localStorage.length; i++) {
-        const storageKey = localStorage.key(i);
-        if (storageKey && storageKey.startsWith(`${prefix}.`)) {
-          const key = storageKey.replace(`${prefix}.`, '');
-          const value = localStorage.getItem(storageKey);
-          
-          if (value !== null) {
-            result[key] = serialize ? JSON.parse(value) : value;
-          }
-        }
-      }
-      
-      return result;
+      return state || {};
     } catch (error) {
       console.error('[BloomStorage] Failed to get all data:', error);
       return {};
     }
-  }, [prefix, serialize]);
+  }, [state]);
 
   // Get storage usage info
   const getStorageInfo = useCallback(async () => {
@@ -207,28 +200,36 @@ export function useBloomStorage(options: StorageOptions = {}) {
       let totalSize = 0;
       let itemCount = 0;
       
-      for (let i = 0; i < localStorage.length; i++) {
-        const key = localStorage.key(i);
-        if (key && key.startsWith(`${prefix}.`)) {
+      Object.keys(localStorage).forEach(key => {
+        if (key.startsWith(`${prefix}.`)) {
           const value = localStorage.getItem(key);
           if (value) {
             totalSize += key.length + value.length;
             itemCount++;
           }
         }
-      }
+      });
       
       return {
         itemCount,
         totalSize,
         totalSizeKB: Math.round(totalSize / 1024 * 100) / 100,
-        prefix
+        prefix,
+        reduxItems: Object.keys(state || {}).length,
+        isHydrated: isReady
       };
     } catch (error) {
       console.error('[BloomStorage] Failed to get storage info:', error);
-      return { itemCount: 0, totalSize: 0, totalSizeKB: 0, prefix };
+      return { 
+        itemCount: 0, 
+        totalSize: 0, 
+        totalSizeKB: 0, 
+        prefix,
+        reduxItems: 0,
+        isHydrated: false
+      };
     }
-  }, [prefix]);
+  }, [prefix, state, isReady]);
 
   return {
     // Core operations
@@ -244,10 +245,14 @@ export function useBloomStorage(options: StorageOptions = {}) {
     clear,
     
     // Utilities
-    subscribe,
     getStorageInfo,
     
-    // Configuration
-    prefix
+    // State info
+    isReady,
+    prefix,
+    
+    // Direct Redux access (for advanced cases)
+    state,
+    dispatch
   };
 }

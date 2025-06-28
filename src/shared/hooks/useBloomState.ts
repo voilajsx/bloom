@@ -1,7 +1,7 @@
 /**
  * Bloom Framework - Shared State Hook (Redux Wrapper)
  * @module @voilajsx/bloom/shared/hooks
- * @file src/shared/hooks/useSharedState.ts
+ * @file src/shared/hooks/useBloomState.ts
  */
 
 import { useSelector, useDispatch } from 'react-redux';
@@ -12,7 +12,7 @@ import type { BloomStateSlice } from '@/platform/types';
 /**
  * Hook for accessing shared Redux state
  */
-export function useSharedState<T = any>(sliceName: string): {
+export function useBloomState<T = any>(sliceName: string): {
   state: T;
   dispatch: ReturnType<typeof useDispatch>;
   isReady: boolean;
@@ -35,7 +35,7 @@ export function useSharedState<T = any>(sliceName: string): {
 /**
  * Hook for accessing multiple slices at once
  */
-export function useSharedStates<T extends Record<string, any>>(
+export function useBloomStates<T extends Record<string, any>>(
   sliceNames: (keyof T)[]
 ): {
   states: T;
@@ -118,7 +118,7 @@ export function useSliceActions<TActions extends Record<string, any>>(
  * Hook for counter slice (common pattern)
  */
 export function useCounter(sliceName: string = 'counter') {
-  const { state, dispatch, isReady } = useSharedState<{ value: number }>(sliceName);
+  const { state, dispatch, isReady } = useBloomState<{ value: number }>(sliceName);
 
   const increment = useCallback(() => {
     dispatch({ type: `${sliceName}/increment` });
@@ -150,7 +150,7 @@ export function useCounter(sliceName: string = 'counter') {
  * Hook for loading slice (common pattern)
  */
 export function useLoading(sliceName: string = 'loading') {
-  const { state, dispatch, isReady } = useSharedState<{
+  const { state, dispatch, isReady } = useBloomState<{
     isLoading: boolean;
     error: string | null;
     data: any;
@@ -193,7 +193,7 @@ export function useLoading(sliceName: string = 'loading') {
  * Hook for UI slice (common pattern)
  */
 export function useUI(sliceName: string = 'ui') {
-  const { state, dispatch, isReady } = useSharedState<{
+  const { state, dispatch, isReady } = useBloomState<{
     modals: Record<string, boolean>;
     sidebar: boolean;
     theme: 'light' | 'dark';
@@ -242,7 +242,7 @@ export function useUI(sliceName: string = 'ui') {
  * Hook for API cache slice (common pattern)
  */
 export function useApiCache(sliceName: string = 'apiCache') {
-  const { state, dispatch, isReady } = useSharedState<{
+  const { state, dispatch, isReady } = useBloomState<{
     cache: Record<string, { data: any; timestamp: number; expiry: number }>;
   }>(sliceName);
 

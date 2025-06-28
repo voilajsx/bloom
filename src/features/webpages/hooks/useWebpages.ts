@@ -13,7 +13,7 @@ interface WebpagesSettings {
 }
 
 export function useWebpages() {
-  const { get, set } = useBloomStorage();
+  const { get, set, isReady } = useBloomStorage();
   const [settings, setSettings] = useState<WebpagesSettings>({
     companyName: 'Bloom Company'
   });
@@ -21,6 +21,8 @@ export function useWebpages() {
 
   // Load settings on mount
   useEffect(() => {
+    if (!isReady) return;
+
     const loadSettings = async () => {
       try {
         const companyName = await get('webpages.companyName', defaults['app-name'] || 'Bloom Company');
@@ -36,7 +38,7 @@ export function useWebpages() {
     };
 
     loadSettings();
-  }, [get]);
+  }, [get, isReady]);
 
   // Update a setting
   const updateSetting = async <K extends keyof WebpagesSettings>(
@@ -81,7 +83,7 @@ export function useWebpages() {
   return {
     // State
     settings,
-    loading,
+    loading: loading || !isReady,
     
     // Computed values
     companyName: settings.companyName,
@@ -92,6 +94,6 @@ export function useWebpages() {
     getPageMeta,
     
     // Utilities
-    isReady: !loading
+    isReady: !loading && isReady
   };
 }

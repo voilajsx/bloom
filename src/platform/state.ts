@@ -295,6 +295,60 @@ export const SLICE_TEMPLATES = {
       },
     },
   }),
+
+  /**
+   * Storage slice template with auto-persistence
+   */
+  STORAGE: (name: string): BloomStateSlice => ({
+    name,
+    initialState: {},
+    reducers: {
+      setValue: (state: any, action: PayloadAction<{ key: string; value: any }>) => {
+        state[action.payload.key] = action.payload.value;
+        // Auto-persist to localStorage
+        try {
+          localStorage.setItem(`bloom.${action.payload.key}`, JSON.stringify(action.payload.value));
+        } catch (error) {
+          console.warn('[Storage] Failed to persist to localStorage:', error);
+        }
+      },
+      removeValue: (state: any, action: PayloadAction<string>) => {
+        delete state[action.payload];
+        try {
+          localStorage.removeItem(`bloom.${action.payload}`);
+        } catch (error) {
+          console.warn('[Storage] Failed to remove from localStorage:', error);
+        }
+      },
+      clearAll: (state: any) => {
+        // Clear Redux state
+        Object.keys(state).forEach(key => delete state[key]);
+        // Clear localStorage
+        try {
+          Object.keys(localStorage).forEach(key => {
+            if (key.startsWith('bloom.')) {
+              localStorage.removeItem(key);
+            }
+          });
+        } catch (error) {
+          console.warn('[Storage] Failed to clear localStorage:', error);
+        }
+      },
+      hydrate: (state: any, action: PayloadAction<Record<string, any>>) => {
+        Object.assign(state, action.payload);
+      },
+      setMultiple: (state: any, action: PayloadAction<Record<string, any>>) => {
+        Object.entries(action.payload).forEach(([key, value]) => {
+          state[key] = value;
+          try {
+            localStorage.setItem(`bloom.${key}`, JSON.stringify(value));
+          } catch (error) {
+            console.warn(`[Storage] Failed to persist ${key} to localStorage:`, error);
+          }
+        });
+      },
+    },
+  }),
 };
 
 /**

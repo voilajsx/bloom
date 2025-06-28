@@ -1,5 +1,5 @@
 /**
- * Bloom Framework - Default Configuration with Layout Routing
+ * Bloom Framework - Default Configuration with Layout Config
  * @module @voilajsx/bloom
  * @file src/defaults.ts
  */
@@ -22,7 +22,7 @@ const defaults = {
   // Server Configuration
   'host': 'localhost',
   'port': 3000,
-  'base-path': '/',
+  'base-path': '/new',
 
   // Build Configuration
   'build-out-dir': 'dist',
@@ -36,13 +36,54 @@ const defaults = {
   'default-layout': 'page',
   'layout-size': 'xl',
 
-  // Layout Routing - which routes use which layouts
-  'layout-routes': {
-    'auth': ['/login', '/register', '/signup', '/forgot-password', '/reset-password'],
-    'admin': ['/admin*', '/about'],
-    'blank': ['/404', '/error', '/maintenance', '/coming-soon'],
-    'popup': ['/popup*'],
-    'page': ['/*'], // Wildcard fallback for everything else
+  // Layout-specific Configuration
+  'layout-config': {
+    admin: {
+      scheme: 'sidebar',
+      tone: 'brand',
+      size: 'lg',
+      logo: {
+        type: 'text', // 'text' | 'image'
+        value: 'B',   // Text content or image path
+        showTitle: true
+      },
+      header: {
+        showIndicator: false,
+        indicator: 'Admin Panel'
+      }
+    },
+    page: {
+      scheme: 'default',
+      tone: 'brand',
+      size: 'xl',
+      header: {
+        showIndicator: false,
+        indicator: 'Website'
+      },
+      footer: {
+        tone:'subtle',
+        navigation: [
+          { key: 'privacy', label: 'Privacy Policy', href: '/privacy' },
+          { key: 'terms', label: 'Terms of Service', href: '/terms' }
+        ],
+        copyright: '© 2024 {title}. All rights reserved.'
+      }
+    },
+    auth: {
+      scheme: 'card',
+      tone: 'clean',
+      size: 'md'
+    },
+    blank: {
+      scheme: 'simple',
+      tone: 'clean',
+      size: 'lg'
+    },
+    popup: {
+      scheme: 'modal',
+      tone: 'clean',
+      size: 'md'
+    }
   },
 
   // Navigation
@@ -81,6 +122,13 @@ export function getNavigationWithBasePath() {
     ...item,
     href: basePath !== '/' ? `${basePath.replace(/\/$/, '')}${item.href}` : item.href
   }));
+}
+
+/**
+ * Get layout configuration for a specific layout type
+ */
+export function getLayoutConfig(layoutType: keyof typeof defaults['layout-config']) {
+  return (defaults as any)['layout-config'][layoutType] || {};
 }
 
 /**

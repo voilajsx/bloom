@@ -36,7 +36,7 @@ const config: BloomFeatureConfig = {
     {
       path: '/about',
       component: () => import('./pages/AboutPage'),
-      layout: 'default',
+      layout: 'admin',
       title: 'About Us',
       meta: {
         description: 'Learn more about our company and mission',

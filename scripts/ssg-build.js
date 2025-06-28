@@ -1,5 +1,5 @@
 /**
- * Bloom Framework - SEO-Optimized Static Site Generation
+ * Bloom Framework - SEO-Optimized Static Site Generation with Base Path Support
  * @file scripts/ssg-build.js
  */
 
@@ -17,7 +17,7 @@ async function generateStaticSite() {
     // 1. Get the actual built assets from dist
     const assets = await getBuiltAssets();
 
-    // 2. Load app configuration
+    // 2. Load app configuration with base path
     const appConfig = await loadAppConfig();
 
     // 3. Discover features and routes
@@ -32,7 +32,7 @@ async function generateStaticSite() {
     await generateSEOFiles(ssgRoutes, appConfig);
 
     console.log(
-      `✅ Bloom SEO SSG: Generated ${ssgRoutes.length} SEO-optimized pages`
+      `✅ Bloom SEO SSG: Generated ${ssgRoutes.length} SEO-optimized pages with base path: ${appConfig.basePath}`
     );
   } catch (error) {
     console.error('❌ Bloom SEO SSG: Generation failed:', error);
@@ -43,6 +43,10 @@ async function generateStaticSite() {
 async function loadAppConfig() {
   const defaultsPath = path.join(__dirname, '../src/defaults.ts');
   const defaultsContent = fs.readFileSync(defaultsPath, 'utf8');
+
+  // Extract base path from defaults
+  const basePath = extractDefaultValue(defaultsContent, 'base-path') || '/';
+  const cleanBasePath = basePath === '/' ? '' : basePath.replace(/\/$/, '');
 
   return {
     name: extractDefaultValue(defaultsContent, 'app-name') || 'Bloom App',
@@ -61,6 +65,8 @@ async function loadAppConfig() {
     language: 'en',
     region: 'US',
     type: 'website',
+    basePath: cleanBasePath, // Clean base path without trailing slash
+    fullBasePath: basePath, // Original base path with trailing slash
   };
 }
 
@@ -75,8 +81,8 @@ async function getBuiltAssets() {
       const files = fs.readdirSync(assetsDir);
 
       files.forEach((file) => {
-        if (file.endsWith('.css')) assets.css.push(`/assets/${file}`);
-        else if (file.endsWith('.js')) assets.js.push(`/assets/${file}`);
+        if (file.endsWith('.css')) assets.css.push(`./assets/${file}`);
+        else if (file.endsWith('.js')) assets.js.push(`./assets/${file}`);
       });
     }
 
@@ -93,8 +99,8 @@ async function getBuiltAssets() {
   } catch (error) {
     console.warn('⚠️ Could not read built assets, using fallback');
     return {
-      mainCSS: '/assets/index.css',
-      mainJS: '/assets/index.js',
+      mainCSS: './assets/index.css',
+      mainJS: './assets/index.js',
       allCSS: [],
       allJS: [],
     };
@@ -131,7 +137,7 @@ async function getSSGRoutes() {
       }
     }
 
-    console.log(`🌸 Bloom SEO SSG: Found ${routes.length} SEO routes`);
+    console.log(`🌸 Bloom SEO SSG: Found ${routes.length} SSG routes`);
     return routes;
   } catch (error) {
     console.error('❌ Failed to discover SEO routes:', error);
@@ -186,8 +192,12 @@ async function generateSEOOptimizedHTML(route, assets, appConfig) {
     const pageTitle = route.title || appConfig.name;
     const pageDescription = route.meta?.description || appConfig.description;
     const pageKeywords = route.meta?.keywords || appConfig.keywords;
-    const pageUrl = `${appConfig.website}${route.path}`;
-    const ogImage = `${appConfig.website}/og-image.png`;
+
+    // Handle base path in URLs
+    const pageUrl = `${appConfig.website}${appConfig.basePath}${route.path}`;
+    const canonicalUrl = pageUrl;
+    const ogImage = `${appConfig.website}${appConfig.basePath}/og-image.png`;
+
     const publishedTime = new Date().toISOString();
     const modifiedTime = publishedTime;
 
@@ -196,6 +206,9 @@ async function generateSEOOptimizedHTML(route, assets, appConfig) {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <!-- Base tag for proper asset loading with base path -->
+  ${appConfig.basePath ? `<base href="${appConfig.fullBasePath}">` : ''}
   
   <!-- Primary Meta Tags -->
   <title>${pageTitle}</title>
@@ -265,19 +278,19 @@ async function generateSEOOptimizedHTML(route, assets, appConfig) {
   </script>
   
   <!-- Canonical URL -->
-  <link rel="canonical" href="${pageUrl}">
+  <link rel="canonical" href="${canonicalUrl}">
   
   <!-- DNS Prefetch -->
   <link rel="dns-prefetch" href="//fonts.googleapis.com">
   <link rel="dns-prefetch" href="//fonts.gstatic.com">
   
   <!-- Favicon -->
-  <link rel="icon" type="image/svg+xml" href="/bloom-icon.svg">
-  <link rel="icon" type="image/x-icon" href="/favicon.ico">
-  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+  <link rel="icon" type="image/svg+xml" href="./bloom-icon.svg">
+  <link rel="icon" type="image/x-icon" href="./favicon.ico">
+  <link rel="apple-touch-icon" href="./apple-touch-icon.png">
   
   <!-- PWA Manifest -->
-  <link rel="manifest" href="/manifest.json">
+  <link rel="manifest" href="./manifest.json">
   <meta name="theme-color" content="#0ea5e9">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
@@ -332,7 +345,7 @@ async function generateSEOOptimizedHTML(route, assets, appConfig) {
 </body>
 </html>`;
 
-    const outputPath = getOutputPath(route.path);
+    const outputPath = getOutputPath(route.path, appConfig.basePath);
     const outputDir = path.dirname(outputPath);
 
     if (!fs.existsSync(outputDir)) {
@@ -355,11 +368,11 @@ async function generateSEOOptimizedHTML(route, assets, appConfig) {
 async function generateSEOFiles(routes, appConfig) {
   const distDir = path.join(process.cwd(), 'dist');
 
-  // Enhanced sitemap.xml
+  // Enhanced sitemap.xml with base path support
   const sitemap = generateEnhancedSitemap(routes, appConfig);
   fs.writeFileSync(path.join(distDir, 'sitemap.xml'), sitemap, 'utf8');
 
-  // SEO-optimized robots.txt
+  // SEO-optimized robots.txt with base path
   const robots = generateSEORobotsTxt(appConfig);
   fs.writeFileSync(path.join(distDir, 'robots.txt'), robots, 'utf8');
 
@@ -391,9 +404,10 @@ function generateEnhancedSitemap(routes, appConfig) {
     .map((route) => {
       const priority = route.path === '/' ? '1.0' : '0.8';
       const changefreq = route.path === '/' ? 'weekly' : 'monthly';
+      const fullUrl = `${appConfig.website}${appConfig.basePath}${route.path}`;
 
       return `  <url>
-    <loc>${appConfig.website}${route.path}</loc>
+    <loc>${fullUrl}</loc>
     <lastmod>${now}</lastmod>
     <changefreq>${changefreq}</changefreq>
     <priority>${priority}</priority>
@@ -412,6 +426,11 @@ ${urls}
 }
 
 function generateSEORobotsTxt(appConfig) {
+  const sitemapUrl = `${appConfig.website}${appConfig.basePath}/sitemap.xml`;
+  const hostUrl =
+    appConfig.website.replace('https://', '').replace('http://', '') +
+    appConfig.basePath;
+
   return `# Bloom Framework - SEO Optimized Robots.txt
 User-agent: *
 Allow: /
@@ -420,7 +439,7 @@ Disallow: /api/
 Disallow: /*.json$
 
 # Sitemap
-Sitemap: ${appConfig.website}/sitemap.xml
+Sitemap: ${sitemapUrl}
 
 # Crawl-delay for specific bots
 User-agent: Googlebot
@@ -429,9 +448,8 @@ Crawl-delay: 1
 User-agent: Bingbot
 Crawl-delay: 1
 
-# Additional files
-Sitemap: ${appConfig.website}/sitemap.xml
-Host: ${appConfig.website.replace('https://', '').replace('http://', '')}
+# Host
+Host: ${hostUrl}
 `;
 }
 
@@ -440,25 +458,25 @@ function generateEnhancedManifest(appConfig) {
     name: appConfig.name,
     short_name: appConfig.name.split(' ')[0],
     description: appConfig.description,
-    start_url: '/',
+    start_url: appConfig.basePath || '/',
     display: 'standalone',
     background_color: '#ffffff',
     theme_color: '#0ea5e9',
     orientation: 'portrait-primary',
-    scope: '/',
+    scope: appConfig.basePath || '/',
     lang: appConfig.language,
     dir: 'ltr',
     categories: ['productivity', 'developer', 'business'],
     screenshots: [
       {
-        src: '/screenshot-wide.png',
+        src: './screenshot-wide.png',
         sizes: '1280x720',
         type: 'image/png',
         form_factor: 'wide',
         label: 'Homescreen of Bloom Framework',
       },
       {
-        src: '/screenshot-narrow.png',
+        src: './screenshot-narrow.png',
         sizes: '750x1334',
         type: 'image/png',
         form_factor: 'narrow',
@@ -467,13 +485,13 @@ function generateEnhancedManifest(appConfig) {
     ],
     icons: [
       {
-        src: '/icon-192.png',
+        src: './icon-192.png',
         sizes: '192x192',
         type: 'image/png',
         purpose: 'any maskable',
       },
       {
-        src: '/icon-512.png',
+        src: './icon-512.png',
         sizes: '512x512',
         type: 'image/png',
         purpose: 'any maskable',
@@ -499,6 +517,7 @@ Last update: ${new Date().toLocaleDateString()}
 Language: English
 Doctype: HTML5
 IDE: Your favorite editor
+Base Path: ${appConfig.basePath || 'Root'}
 `;
 }
 
@@ -506,8 +525,8 @@ function generateSecurityTxt(appConfig) {
   return `Contact: mailto:security@bloom-framework.dev
 Expires: ${new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString()}
 Preferred-Languages: en
-Canonical: ${appConfig.website}/security.txt
-Policy: ${appConfig.website}/security-policy
+Canonical: ${appConfig.website}${appConfig.basePath}/security.txt
+Policy: ${appConfig.website}${appConfig.basePath}/security-policy
 `;
 }
 
@@ -518,7 +537,7 @@ function extractDefaultValue(content, key) {
   return match ? match[1] : null;
 }
 
-function getOutputPath(routePath) {
+function getOutputPath(routePath, basePath) {
   const distDir = path.join(process.cwd(), 'dist');
 
   if (routePath === '/') {
