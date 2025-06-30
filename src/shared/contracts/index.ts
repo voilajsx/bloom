@@ -1,5 +1,5 @@
 /**
- * Bloom Framework - Standard Contract Definitions & Templates
+ * Bloom Framework - Standard Contract Definitions & Templates with Security
  * @module @voilajsx/bloom/shared/contracts
  * @file src/shared/contracts/index.ts
  */
@@ -110,7 +110,85 @@ export const STANDARD_TYPES = {
   ROUTE_CONFIG_TYPE: 'RouteConfig'
 } as const;
 
-// Contract Templates
+// 🔒 SECURITY: Security Contract Patterns
+export const SECURITY_PATTERNS = {
+  // XSS Prevention
+  NO_DANGEROUS_HTML: 'Components must not use dangerouslySetInnerHTML without sanitization',
+  SANITIZE_INPUTS: 'All user inputs must be sanitized before storage or display',
+  ESCAPE_OUTPUT: 'All dynamic content must be properly escaped',
+  
+  // Data Security
+  NO_SENSITIVE_STORAGE: 'No passwords, tokens, or secrets in localStorage',
+  VALIDATE_INPUTS: 'All inputs must be validated on client and server',
+  SECURE_API_CALLS: 'API calls must use proper headers and validation',
+  
+  // Component Security
+  CSP_COMPLIANT: 'Components must be CSP-compliant (no inline scripts/styles)',
+  SECURE_REFS: 'No direct DOM manipulation without validation',
+  SAFE_ROUTING: 'All route parameters must be validated',
+  
+  // Storage Security
+  KEY_VALIDATION: 'Storage keys must follow secure naming patterns',
+  VALUE_SANITIZATION: 'All stored values must be sanitized',
+  NO_SENSITIVE_LOGS: 'Never log sensitive data in console or analytics'
+} as const;
+
+// 🔒 SECURITY: Security validation functions
+export const SECURITY_VALIDATORS = {
+  // Validate component security
+  validateComponent: (componentCode: string): string[] => {
+    const violations: string[] = [];
+    
+    if (componentCode.includes('dangerouslySetInnerHTML')) {
+      violations.push(SECURITY_PATTERNS.NO_DANGEROUS_HTML);
+    }
+    
+    if (/eval\(|new Function\(|innerHTML\s*=/.test(componentCode)) {
+      violations.push(SECURITY_PATTERNS.CSP_COMPLIANT);
+    }
+    
+    if (/console\.(log|info|warn|error).*(?:password|token|secret|key)/i.test(componentCode)) {
+      violations.push(SECURITY_PATTERNS.NO_SENSITIVE_LOGS);
+    }
+    
+    return violations;
+  },
+  
+  // Validate API call security
+  validateApiCall: (url: string, options: any): string[] => {
+    const violations: string[] = [];
+    
+    if (!url.startsWith('https://') && !url.startsWith('/')) {
+      violations.push('API calls should use HTTPS or relative URLs');
+    }
+    
+    if (options.headers && !options.headers['Content-Type']) {
+      violations.push(SECURITY_PATTERNS.SECURE_API_CALLS);
+    }
+    
+    return violations;
+  },
+  
+  // Validate storage usage
+  validateStorage: (key: string, value: any): string[] => {
+    const violations: string[] = [];
+    
+    if (!/^[a-zA-Z0-9._-]+$/.test(key)) {
+      violations.push(SECURITY_PATTERNS.KEY_VALIDATION);
+    }
+    
+    const sensitivePatterns = [/password/i, /token/i, /secret/i, /key/i];
+    const valueStr = typeof value === 'string' ? value : JSON.stringify(value);
+    
+    if (sensitivePatterns.some(pattern => pattern.test(valueStr))) {
+      violations.push(SECURITY_PATTERNS.NO_SENSITIVE_STORAGE);
+    }
+    
+    return violations;
+  }
+};
+
+// Contract Templates (updated with security)
 export const CONTRACT_TEMPLATES = {
   // Empty contract
   EMPTY: (): BloomFeatureContract => ({}),
@@ -125,7 +203,7 @@ export const CONTRACT_TEMPLATES = {
     }
   }),
   
-  // API feature
+  // API feature with security
   API_FEATURE: (): BloomFeatureContract => ({
     provides: {
       services: [STANDARD_SERVICES.API_CLIENT],
@@ -133,10 +211,14 @@ export const CONTRACT_TEMPLATES = {
     },
     consumes: {
       hooks: [STANDARD_HOOKS.USE_SHARED_STATE]
+    },
+    api: {
+      endpoints: ['/*'],
+      methods: ['GET', 'POST', 'PUT', 'DELETE']
     }
   }),
   
-  // Auth feature
+  // Auth feature with security
   AUTH_FEATURE: (): BloomFeatureContract => ({
     provides: {
       services: [STANDARD_SERVICES.AUTH, STANDARD_SERVICES.SESSION],
@@ -161,8 +243,8 @@ export const CONTRACT_TEMPLATES = {
     }
   }),
   
-  // Data feature
-  DATA_FEATURE: (): BloomFeatureContract => ({
+  // Secure data feature
+  SECURE_DATA_FEATURE: (): BloomFeatureContract => ({
     provides: {
       services: [STANDARD_SERVICES.STORAGE, STANDARD_SERVICES.CACHE],
       hooks: [STANDARD_HOOKS.USE_LOCAL_STORAGE, STANDARD_HOOKS.USE_SESSION_STORAGE]
@@ -195,9 +277,10 @@ export function isValidType(type: string): boolean {
   return Object.values(STANDARD_TYPES).includes(type as any);
 }
 
-// Contract builder utility
+// 🔒 SECURITY: Enhanced contract builder with security validation
 export class ContractBuilder {
   private contract: BloomFeatureContract = {};
+  private securityViolations: string[] = [];
 
   providesService(service: string): ContractBuilder {
     if (!this.contract.provides) this.contract.provides = {};
@@ -248,14 +331,58 @@ export class ContractBuilder {
     return this;
   }
 
+  // 🔒 SECURITY: Add security requirement
+  requiresSecurity(pattern: keyof typeof SECURITY_PATTERNS): ContractBuilder {
+    if (!this.contract.api) this.contract.api = {};
+    if (!this.contract.api.methods) this.contract.api.methods = [];
+    this.contract.api.methods.push(`SECURITY:${pattern}`);
+    return this;
+  }
+
+  // 🔒 SECURITY: Validate contract before building
   build(): BloomFeatureContract {
+    this.validateSecurity();
+    
+    if (this.securityViolations.length > 0) {
+      console.warn('🔒 Security violations in contract:', this.securityViolations);
+    }
+    
     return { ...this.contract };
+  }
+
+  private validateSecurity(): void {
+    this.securityViolations = [];
+
+    // Check for auth without secure storage
+    if (this.contract.provides?.services?.includes(STANDARD_SERVICES.AUTH)) {
+      if (!this.contract.consumes?.hooks?.includes(STANDARD_HOOKS.USE_LOCAL_STORAGE)) {
+        this.securityViolations.push('Auth services should use secure storage patterns');
+      }
+    }
+
+    // Check for API without security hooks
+    if (this.contract.provides?.services?.includes(STANDARD_SERVICES.API_CLIENT)) {
+      if (!this.contract.api?.methods?.some(m => m.startsWith('SECURITY:'))) {
+        this.securityViolations.push('API services should specify security requirements');
+      }
+    }
+  }
+
+  getSecurityViolations(): string[] {
+    return [...this.securityViolations];
   }
 }
 
 // Quick contract creation
 export function createContract(): ContractBuilder {
   return new ContractBuilder();
+}
+
+// 🔒 SECURITY: Secure contract templates
+export function createSecureContract(): ContractBuilder {
+  return new ContractBuilder()
+    .requiresSecurity('SANITIZE_INPUTS')
+    .requiresSecurity('VALIDATE_INPUTS');
 }
 
 // Merge contracts utility

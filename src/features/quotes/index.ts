@@ -5,22 +5,23 @@
  */
 
 import type { BloomFeatureConfig } from '@/platform/types';
-import { createContract, STANDARD_HOOKS, STANDARD_SERVICES, STANDARD_STATE } from '@/shared/contracts';
+import { createContract } from '@/shared/contracts';
 import { createSliceFromTemplate } from '@/platform/state';
 
 const config: BloomFeatureConfig = {
   name: 'quotes',
   
-  // Feature contract - what this feature provides/consumes
+  // ✅ FIXED: Feature contract - only what this feature provides (no platform dependencies)
   contract: createContract()
     .providesService('quotesApi')
     .providesHook('useQuotes')
     .providesComponent('QuotesPage')
     .providesComponent('QuoteCard')
     .providesComponent('QuoteList')
-    .consumesHook(STANDARD_HOOKS.USE_SHARED_STATE)
-    .consumesHook(STANDARD_HOOKS.USE_API)
-    .consumesState('quotes')
+    // ✅ Removed platform dependencies:
+    // - STANDARD_HOOKS.USE_SHARED_STATE (provided by Bloom platform)
+    // - STANDARD_HOOKS.USE_API (provided by Bloom platform)  
+    // - consumesState('quotes') (this feature provides its own quotes state)
     .build(),
   
   // Use Redux shared state

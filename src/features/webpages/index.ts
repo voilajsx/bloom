@@ -5,17 +5,18 @@
  */
 
 import type { BloomFeatureConfig } from '@/platform/types';
-import { createContract, STANDARD_HOOKS, STANDARD_COMPONENTS } from '@/shared/contracts';
+import { createContract } from '@/shared/contracts';
 
 const config: BloomFeatureConfig = {
   name: 'webpages',
   
-  // Feature contract - what this feature provides/consumes
+  // ✅ FIXED: Feature contract - only what this feature provides
   contract: createContract()
     .providesComponent('HomePage')
     .providesComponent('AboutPage')
     .providesComponent('ContactPage')
-    .consumesHook(STANDARD_HOOKS.USE_ROUTER)
+    // ✅ Removed platform dependency:
+    // - STANDARD_HOOKS.USE_ROUTER (provided by Bloom platform)
     .build(),
   
   // Use local state management (not Redux)

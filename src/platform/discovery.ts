@@ -1,5 +1,6 @@
 /**
- * Bloom Framework - Discovery with Contract Validation
+ * Bloom Framework - Optimized Discovery with Essential Debug
+ * ⚡ Performance: Build-time discovery with minimal logging
  * @module @voilajsx/bloom/platform
  * @file src/platform/discovery.ts
  */
@@ -15,21 +16,129 @@ import type {
 import { 
   registerContract, 
   validateAllContracts, 
-  checkCircularDependencies,
-  getAllContracts 
+  checkCircularDependencies
 } from './contracts';
 import { addSlices } from './state';
 import defaults from '@/defaults';
 
 /**
- * Generate unique route ID
+ * ⚡ OPTIMIZED: Feature discovery with essential debugging only
  */
-function generateRouteId(featureName: string, path: string): string {
-  return `${featureName}:${path}`;
+async function optimizedFeatureDiscovery(): Promise<{
+  features: BloomFeatureRegistry;
+  routes: BloomCompiledRoute[];
+  contracts: BloomContractRegistry;
+  reduxNeeded: boolean;
+}> {
+  const features: BloomFeatureRegistry = {};
+  const routes: BloomCompiledRoute[] = [];
+  const contracts: BloomContractRegistry = {};
+  let reduxNeeded = false;
+
+  try {
+    // Import features index
+    const featuresIndex = await import('@/features/index');
+    const featureNames = [...(featuresIndex.BLOOM_FEATURES || [])];
+    
+    console.log(`[Discovery] Processing ${featureNames.length} features: ${featureNames.join(', ')}`);
+
+    if (featureNames.length === 0) {
+      console.warn('[Discovery] No features found');
+      return { features, routes, contracts, reduxNeeded };
+    }
+
+    // Process each feature
+    for (const featureName of featureNames) {
+      try {
+        const featureModule = (featuresIndex as any)[featureName];
+        
+        if (!featureModule) {
+          console.error(`[Discovery] ❌ Feature "${featureName}" not found`);
+          continue;
+        }
+        
+        const config: BloomFeatureConfig = featureModule;
+        
+        if (!config?.name) {
+          console.error(`[Discovery] ❌ Invalid config for "${featureName}"`);
+          continue;
+        }
+        
+        // Redux setup
+        if (config.sharedState) {
+          reduxNeeded = true;
+          if (config.stateSlices?.length) {
+            addSlices(config.stateSlices);
+          }
+        }
+
+        // Contract registration
+        if (config.contract) {
+          registerContract(config.name, config.contract);
+          contracts[config.name] = config.contract;
+        }
+
+        // Route compilation
+        if (config.routes?.length) {
+          const compiledRoutes = config.routes.map(route => compileRoute(route, config.name, config));
+          routes.push(...compiledRoutes);
+        }
+
+        // Feature registration
+        features[config.name] = {
+          config,
+          routes: config.routes ? config.routes.map(route => compileRoute(route, config.name, config)) : [],
+          contract: config.contract,
+          loaded: true
+        };
+
+        console.log(`[Discovery] ✅ ${config.name}: ${config.routes?.length || 0} routes${config.sharedState ? ' + Redux' : ''}`);
+
+      } catch (featureError: any) {
+        console.error(`[Discovery] ❌ Failed to load "${featureName}":`, featureError?.message);
+      }
+    }
+
+    // Contract validation (only show errors)
+    if (Object.keys(contracts).length > 0) {
+      const validationResults = validateAllContracts(features);
+      
+      Object.entries(validationResults).forEach(([featureName, validation]) => {
+        if (features[featureName]) {
+          features[featureName].validation = validation;
+          
+          if (!validation.valid) {
+            console.error(`[Discovery] ❌ Contract errors for "${featureName}":`, validation.errors);
+          }
+        }
+      });
+
+      const cycles = checkCircularDependencies(contracts);
+      if (cycles.length > 0) {
+        console.error('[Discovery] ❌ Circular dependencies:', cycles);
+      }
+    }
+
+    // Sort routes by specificity
+    routes.sort((a, b) => {
+      const aSpecificity = (a.path.match(/\//g) || []).length + (a.path.includes(':') ? -1 : 0);
+      const bSpecificity = (b.path.match(/\//g) || []).length + (b.path.includes(':') ? -1 : 0);
+      return bSpecificity - aSpecificity;
+    });
+
+    // Essential summary only
+    console.log(`[Discovery] ✅ ${Object.keys(features).length} features, ${routes.length} routes${reduxNeeded ? ', Redux enabled' : ''}`);
+    
+    return { features, routes, contracts, reduxNeeded };
+
+  } catch (error: any) {
+    console.error('[Discovery] ❌ Fatal error:', error?.message);
+    return { features: {}, routes: [], contracts: {}, reduxNeeded: false };
+  }
 }
 
 /**
- * Compile route with feature context
+ * 🔨 Compile route with feature context
  */
 function compileRoute(
   route: any,
@@ -39,7 +148,7 @@ function compileRoute(
   return {
     path: route.path,
     component: route.component,
-    id: generateRouteId(featureName, route.path),
+    id: `${featureName}:${route.path}`,
     featureName,
     fullPath: route.path,
     layout: route.layout || defaults['default-layout'] || 'default',
@@ -53,159 +162,31 @@ function compileRoute(
   };
 }
 
-/**
- * Discover features from the features index
- */
-async function discoverFeatures(): Promise<{
-  features: BloomFeatureRegistry;
-  routes: BloomCompiledRoute[];
-  contracts: BloomContractRegistry;
-}> {
-  const features: BloomFeatureRegistry = {};
-  const routes: BloomCompiledRoute[] = [];
-  const contracts: BloomContractRegistry = {};
-
-  try {
-    // Import the auto-generated features index
-    const featuresIndex = await import('@/features/index');
-    
-    // Get feature names (exclude metadata)
-    const featureNames = Object.keys(featuresIndex).filter(key => 
-      key !== 'BLOOM_FEATURES' && 
-      key !== 'BLOOM_FEATURE_META' && 
-      key !== 'default'
-    );
-
-    console.log(`[Discovery] Found ${featureNames.length} features: ${featureNames.join(', ')}`);
-
-    // Load each feature configuration
-    for (const featureName of featureNames) {
-      try {
-        const featureModule = (featuresIndex as any)[featureName];
-        
-        if (!featureModule) {
-          console.warn(`[Discovery] Feature ${featureName} module not found`);
-          continue;
-        }
-
-        const config: BloomFeatureConfig = featureModule;
-        
-        // Validate that config has routes
-        if (!config.routes || !Array.isArray(config.routes)) {
-          console.error(`[Discovery] Feature ${config.name} has no routes`);
-          continue;
-        }
-
-        // Register contract if provided
-        if (config.contract) {
-          registerContract(config.name, config.contract);
-          contracts[config.name] = config.contract;
-          console.log(`[Discovery] Registered contract for feature: ${config.name}`);
-        }
-
-        // Register Redux slices if sharedState is enabled
-        if (config.sharedState && config.stateSlices) {
-          try {
-            addSlices(config.stateSlices);
-            console.log(`[Discovery] Added ${config.stateSlices.length} Redux slices for feature: ${config.name}`);
-          } catch (error) {
-            console.error(`[Discovery] Failed to add Redux slices for ${config.name}:`, error);
-          }
-        }
-
-        // Compile routes
-        const compiledRoutes = config.routes.map(route => 
-          compileRoute(route, config.name, config)
-        );
-
-        // Register feature
-        features[config.name] = {
-          config,
-          routes: compiledRoutes,
-          contract: config.contract,
-          loaded: true
-        };
-
-        // Add routes to global registry
-        routes.push(...compiledRoutes);
-
-        console.log(`[Discovery] Loaded feature '${config.name}' with ${compiledRoutes.length} routes`);
-
-      } catch (error) {
-        console.error(`[Discovery] Failed to load feature ${featureName}:`, error);
-      }
-    }
-
-    // Validate all contracts
-    if (Object.keys(contracts).length > 0) {
-      console.log(`[Discovery] Validating ${Object.keys(contracts).length} contracts...`);
-      
-      const validationResults = validateAllContracts(features);
-      
-      // Add validation results to features
-      Object.entries(validationResults).forEach(([featureName, validation]) => {
-        if (features[featureName]) {
-          features[featureName].validation = validation;
-          
-          if (!validation.valid) {
-            console.error(`[Discovery] Contract validation failed for ${featureName}:`, validation.errors);
-          } else if (validation.warnings.length > 0) {
-            console.warn(`[Discovery] Contract warnings for ${featureName}:`, validation.warnings);
-          }
-        }
-      });
-
-      // Check for circular dependencies
-      const cycles = checkCircularDependencies(contracts);
-      if (cycles.length > 0) {
-        console.error('[Discovery] Circular dependencies detected:', cycles);
-      }
-    }
-
-    // Sort routes by specificity (more specific paths first)
-    routes.sort((a, b) => {
-      const aSpecificity = (a.path.match(/\//g) || []).length + (a.path.includes(':') ? -1 : 0);
-      const bSpecificity = (b.path.match(/\//g) || []).length + (b.path.includes(':') ? -1 : 0);
-      return bSpecificity - aSpecificity;
-    });
-
-    console.log(`[Discovery] Discovered ${Object.keys(features).length} features, ${routes.length} routes, ${Object.keys(contracts).length} contracts`);
-    
-    // Log routes for debugging
-    routes.forEach(route => {
-      console.log(`[Discovery] Route: ${route.path} (${route.featureName})`);
-    });
-    
-    return { features, routes, contracts };
-
-  } catch (error) {
-    console.error('[Discovery] Feature discovery failed:', error);
-    return { features: {}, routes: [], contracts: {} };
-  }
-}
-
-// Cache to avoid re-discovery
+// Cache for discovery results
 let discoveryCache: {
   features: BloomFeatureRegistry;
   routes: BloomCompiledRoute[];
   contracts: BloomContractRegistry;
+  reduxNeeded: boolean;
 } | null = null;
 
 let discoveryPromise: Promise<{
   features: BloomFeatureRegistry;
   routes: BloomCompiledRoute[];
   contracts: BloomContractRegistry;
+  reduxNeeded: boolean;
 }> | null = null;
 
 /**
- * Hook for feature discovery
+ * 🎯 Optimized discovery hook with essential logging
  */
-export function useFeatureDiscovery(): BloomDiscoveryResult {
+export function useOptimizedFeatureDiscovery(): BloomDiscoveryResult & { reduxNeeded: boolean } {
   const [features, setFeatures] = useState<BloomFeatureRegistry>({});
   const [routes, setRoutes] = useState<BloomCompiledRoute[]>([]);
   const [contracts, setContracts] = useState<BloomContractRegistry>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>();
+  const [reduxNeeded, setReduxNeeded] = useState(false);
 
   useEffect(() => {
     const loadFeatures = async () => {
@@ -215,6 +196,7 @@ export function useFeatureDiscovery(): BloomDiscoveryResult {
           setFeatures(discoveryCache.features);
           setRoutes(discoveryCache.routes);
           setContracts(discoveryCache.contracts);
+          setReduxNeeded(discoveryCache.reduxNeeded);
           setLoading(false);
           return;
         }
@@ -225,31 +207,33 @@ export function useFeatureDiscovery(): BloomDiscoveryResult {
           setFeatures(result.features);
           setRoutes(result.routes);
           setContracts(result.contracts);
+          setReduxNeeded(result.reduxNeeded);
           setLoading(false);
           return;
         }
 
-        // Start new discovery
         setError(undefined);
         
-        discoveryPromise = discoverFeatures();
-        const { features: discoveredFeatures, routes: discoveredRoutes, contracts: discoveredContracts } = await discoveryPromise;
+        // Start discovery with timing
+        const startTime = performance.now();
+        discoveryPromise = optimizedFeatureDiscovery();
+        const result = await discoveryPromise;
+        const endTime = performance.now();
         
-        // Cache the results
-        discoveryCache = {
-          features: discoveredFeatures,
-          routes: discoveredRoutes,
-          contracts: discoveredContracts
-        };
+        console.log(`[Discovery] Completed in ${Math.round(endTime - startTime)}ms`);
         
-        setFeatures(discoveredFeatures);
-        setRoutes(discoveredRoutes);
-        setContracts(discoveredContracts);
+        // Cache results
+        discoveryCache = result;
+        
+        setFeatures(result.features);
+        setRoutes(result.routes);
+        setContracts(result.contracts);
+        setReduxNeeded(result.reduxNeeded);
 
-      } catch (err) {
-        const errorMessage = err instanceof Error ? err.message : 'Unknown discovery error';
+      } catch (err: any) {
+        const errorMessage = err?.message || 'Discovery failed';
+        console.error('[Discovery] ❌ Hook error:', errorMessage);
         setError(errorMessage);
-        console.error('[Discovery] Discovery failed:', err);
       } finally {
         setLoading(false);
         discoveryPromise = null;
@@ -264,10 +248,12 @@ export function useFeatureDiscovery(): BloomDiscoveryResult {
     routes,
     contracts,
     loading,
-    error
+    error,
+    reduxNeeded
   };
 }
 
+// Utility functions (unchanged)
 export function getFeature(features: BloomFeatureRegistry, name: string) {
   return features[name] || null;
 }

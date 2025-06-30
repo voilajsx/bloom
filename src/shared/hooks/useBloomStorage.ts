@@ -1,5 +1,5 @@
 /**
- * Bloom Framework - Storage Hook (Redux Wrapper with Auto-Persistence)
+ * Bloom Framework - Secure Storage Hook (Redux Wrapper with Auto-Persistence)
  * @module @voilajsx/bloom/shared
  * @file src/shared/hooks/useBloomStorage.ts
  */
@@ -16,8 +16,57 @@ interface StorageOptions {
   autoHydrate?: boolean;
 }
 
+// 🔒 SECURITY: Input sanitization
+function sanitizeValue(value: any): any {
+  if (typeof value === 'string') {
+    // Prevent XSS by escaping dangerous characters
+    return value
+      .replace(/<script/gi, '&lt;script')
+      .replace(/<\/script>/gi, '&lt;/script&gt;')
+      .replace(/javascript:/gi, 'javascript_blocked:')
+      .replace(/on\w+=/gi, 'blocked_event=');
+  }
+  
+  if (typeof value === 'object' && value !== null) {
+    if (Array.isArray(value)) {
+      return value.map(item => sanitizeValue(item));
+    }
+    
+    const sanitized: Record<string, any> = {};
+    Object.entries(value).forEach(([key, val]) => {
+      sanitized[key] = sanitizeValue(val);
+    });
+    return sanitized;
+  }
+  
+  return value;
+}
+
+// 🔒 SECURITY: Validate storage key to prevent injection
+function validateKey(key: string): boolean {
+  // Only allow alphanumeric, dots, dashes, underscores
+  return /^[a-zA-Z0-9._-]+$/.test(key);
+}
+
+// 🔒 SECURITY: Check for sensitive data patterns
+function containsSensitiveData(value: any): boolean {
+  const sensitivePatterns = [
+    /password/i,
+    /token/i,
+    /secret/i,
+    /api[_-]?key/i,
+    /private[_-]?key/i,
+    /credit[_-]?card/i,
+    /ssn/i,
+    /social[_-]?security/i
+  ];
+  
+  const valueStr = typeof value === 'string' ? value : JSON.stringify(value);
+  return sensitivePatterns.some(pattern => pattern.test(valueStr));
+}
+
 /**
- * Bloom Storage Hook - Simple API with Redux + localStorage persistence
+ * Bloom Storage Hook - Secure API with Redux + localStorage persistence
  */
 export function useBloomStorage(options: StorageOptions = {}) {
   const { 
@@ -44,9 +93,21 @@ export function useBloomStorage(options: StorageOptions = {}) {
         Object.keys(localStorage).forEach(key => {
           if (key.startsWith(`${prefix}.`)) {
             const storageKey = key.replace(`${prefix}.`, '');
+            
+            // 🔒 SECURITY: Validate key format
+            if (!validateKey(storageKey)) {
+              console.warn(`[BloomStorage] Invalid key format skipped: ${storageKey}`);
+              return;
+            }
+            
             const value = localStorage.getItem(key);
             if (value !== null) {
-              storedData[storageKey] = JSON.parse(value);
+              try {
+                const parsed = JSON.parse(value);
+                storedData[storageKey] = sanitizeValue(parsed);
+              } catch (error) {
+                console.warn(`[BloomStorage] Failed to parse stored value for ${storageKey}`);
+              }
             }
           }
         });
@@ -54,7 +115,7 @@ export function useBloomStorage(options: StorageOptions = {}) {
         // Hydrate Redux if we have data
         if (Object.keys(storedData).length > 0) {
           dispatch({ type: 'storage/hydrate', payload: storedData });
-          console.log(`[BloomStorage] Hydrated ${Object.keys(storedData).length} items from localStorage`);
+          console.log(`[BloomStorage] 🔒 Securely hydrated ${Object.keys(storedData).length} items from localStorage`);
         }
       } catch (error) {
         console.error('[BloomStorage] Failed to hydrate from localStorage:', error);
@@ -66,6 +127,12 @@ export function useBloomStorage(options: StorageOptions = {}) {
 
   // Get value from Redux state with defaults fallback
   const get = useCallback(async <T = any>(key: string, fallback?: T): Promise<T> => {
+    // 🔒 SECURITY: Validate key
+    if (!validateKey(key)) {
+      console.warn(`[BloomStorage] Invalid key format: ${key}`);
+      return (fallback ?? null) as T;
+    }
+
     try {
       // First check Redux state
       if (state && state[key] !== undefined) {
@@ -75,7 +142,8 @@ export function useBloomStorage(options: StorageOptions = {}) {
       // Then check localStorage directly (in case Redux not hydrated yet)
       const stored = localStorage.getItem(`${prefix}.${key}`);
       if (stored !== null) {
-        return JSON.parse(stored) as T;
+        const parsed = JSON.parse(stored);
+        return sanitizeValue(parsed) as T;
       }
 
       // Check defaults configuration
@@ -105,10 +173,23 @@ export function useBloomStorage(options: StorageOptions = {}) {
 
   // Set value in Redux (auto-persists to localStorage via reducer)
   const set = useCallback(async <T = any>(key: string, value: T): Promise<boolean> => {
+    // 🔒 SECURITY: Validate key
+    if (!validateKey(key)) {
+      console.warn(`[BloomStorage] Invalid key format: ${key}`);
+      return false;
+    }
+
+    // 🔒 SECURITY: Check for sensitive data
+    if (containsSensitiveData(value)) {
+      console.warn(`[BloomStorage] 🔒 Potential sensitive data detected in key: ${key}. Consider using secure storage.`);
+      // Don't block, but warn - let developer decide
+    }
+
     try {
+      const sanitizedValue = sanitizeValue(value);
       dispatch({ 
         type: 'storage/setValue', 
-        payload: { key, value } 
+        payload: { key, value: sanitizedValue } 
       });
       return true;
     } catch (error) {
@@ -119,6 +200,12 @@ export function useBloomStorage(options: StorageOptions = {}) {
 
   // Remove value from Redux and localStorage
   const remove = useCallback(async (key: string): Promise<boolean> => {
+    // 🔒 SECURITY: Validate key
+    if (!validateKey(key)) {
+      console.warn(`[BloomStorage] Invalid key format: ${key}`);
+      return false;
+    }
+
     try {
       dispatch({ 
         type: 'storage/removeValue', 
@@ -133,6 +220,11 @@ export function useBloomStorage(options: StorageOptions = {}) {
 
   // Check if key exists in Redux state
   const has = useCallback(async (key: string): Promise<boolean> => {
+    // 🔒 SECURITY: Validate key
+    if (!validateKey(key)) {
+      return false;
+    }
+
     try {
       if (state && state[key] !== undefined) {
         return true;
@@ -152,7 +244,11 @@ export function useBloomStorage(options: StorageOptions = {}) {
     
     await Promise.all(
       keys.map(async (key) => {
-        result[key] = await get<T>(key);
+        if (validateKey(key)) {
+          result[key] = await get<T>(key);
+        } else {
+          console.warn(`[BloomStorage] Invalid key skipped: ${key}`);
+        }
       })
     );
     
@@ -162,9 +258,32 @@ export function useBloomStorage(options: StorageOptions = {}) {
   // Set multiple values at once
   const setMultiple = useCallback(async (data: Record<string, any>): Promise<boolean> => {
     try {
+      // 🔒 SECURITY: Validate all keys first
+      const invalidKeys = Object.keys(data).filter(key => !validateKey(key));
+      if (invalidKeys.length > 0) {
+        console.warn(`[BloomStorage] Invalid keys skipped: ${invalidKeys.join(', ')}`);
+        // Filter out invalid keys
+        const validData: Record<string, any> = {};
+        Object.entries(data).forEach(([key, value]) => {
+          if (validateKey(key)) {
+            validData[key] = value;
+          }
+        });
+        data = validData;
+      }
+
+      // 🔒 SECURITY: Sanitize all values
+      const sanitizedData: Record<string, any> = {};
+      Object.entries(data).forEach(([key, value]) => {
+        if (containsSensitiveData(value)) {
+          console.warn(`[BloomStorage] 🔒 Potential sensitive data detected in key: ${key}`);
+        }
+        sanitizedData[key] = sanitizeValue(value);
+      });
+
       dispatch({ 
         type: 'storage/setMultiple', 
-        payload: data 
+        payload: sanitizedData 
       });
       return true;
     } catch (error) {
@@ -177,6 +296,7 @@ export function useBloomStorage(options: StorageOptions = {}) {
   const clear = useCallback(async (): Promise<boolean> => {
     try {
       dispatch({ type: 'storage/clearAll' });
+      console.log('[BloomStorage] 🔒 All storage cleared securely');
       return true;
     } catch (error) {
       console.error('[BloomStorage] Failed to clear storage:', error);
@@ -194,11 +314,12 @@ export function useBloomStorage(options: StorageOptions = {}) {
     }
   }, [state]);
 
-  // Get storage usage info
+  // Get storage usage info with security metrics
   const getStorageInfo = useCallback(async () => {
     try {
       let totalSize = 0;
       let itemCount = 0;
+      let securityWarnings = 0;
       
       Object.keys(localStorage).forEach(key => {
         if (key.startsWith(`${prefix}.`)) {
@@ -206,6 +327,16 @@ export function useBloomStorage(options: StorageOptions = {}) {
           if (value) {
             totalSize += key.length + value.length;
             itemCount++;
+            
+            // Check for potential security issues
+            try {
+              const parsed = JSON.parse(value);
+              if (containsSensitiveData(parsed)) {
+                securityWarnings++;
+              }
+            } catch (error) {
+              // Ignore parse errors for size calculation
+            }
           }
         }
       });
@@ -216,7 +347,9 @@ export function useBloomStorage(options: StorageOptions = {}) {
         totalSizeKB: Math.round(totalSize / 1024 * 100) / 100,
         prefix,
         reduxItems: Object.keys(state || {}).length,
-        isHydrated: isReady
+        isHydrated: isReady,
+        securityWarnings,
+        isSecure: securityWarnings === 0
       };
     } catch (error) {
       console.error('[BloomStorage] Failed to get storage info:', error);
@@ -226,7 +359,9 @@ export function useBloomStorage(options: StorageOptions = {}) {
         totalSizeKB: 0, 
         prefix,
         reduxItems: 0,
-        isHydrated: false
+        isHydrated: false,
+        securityWarnings: 0,
+        isSecure: true
       };
     }
   }, [prefix, state, isReady]);

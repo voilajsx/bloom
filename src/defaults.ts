@@ -29,7 +29,7 @@ const defaults = {
   'build-assets-dir': 'assets',
 
   // UIKit Theme
-  'app-theme': 'studio',
+  'app-theme': 'aurora',
   'app-mode': 'light',
 
   // Layout Configuration
