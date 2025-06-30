@@ -1,294 +1,245 @@
-# Bloom Framework - LLM Code Generation Guide v1.0
+# Bloom Framework - Complete LLM Development Guide v2.0
 
-## 🎯 Core LLM Rules for Bloom Framework
+## 🌸 Framework Philosophy & Core Principles
 
-### Rule 1: Feature Structure (ALWAYS follow this pattern)
+### The Bloom Way: True Feature Modularity
 
-```typescript
-// Every feature MUST have this structure
-src/features/[feature-name]/
-├── index.ts          // Feature configuration with contract
-├── pages/            // React components for routes
-├── components/       // Reusable UI components
-├── hooks/            // Business logic hooks
-└── types.ts          // (optional) TypeScript definitions
+Bloom Framework is built on a revolutionary principle: **features should be completely independent, composable modules that can be developed, tested, and deployed in isolation while maintaining perfect integration**.
+
+#### Core Philosophy
+
+1. **Contract-First Development**: Every feature declares what it provides and consumes
+2. **Smart State Management**: Choose local state OR Redux per feature, never mixed
+3. **Zero Coupling**: Features never directly import from each other
+4. **LLM-Optimized**: Predictable patterns enable 10x faster AI-assisted development
+5. **Performance by Design**: Lazy loading, conditional Redux, smart bundling
+
+---
+
+## 🎯 The Bloom Mental Model
+
+### Think in Features, Not Components
+
+```
+Traditional Approach:           Bloom Approach:
+├── components/                ├── features/
+├── pages/                     │   ├── user-dashboard/
+├── hooks/                     │   │   ├── index.ts (contract)
+├── utils/                     │   │   ├── pages/
+└── store/                     │   │   ├── hooks/
+                               │   │   └── components/
+                               │   └── quote-manager/
+                               │       ├── index.ts (contract)
+                               │       ├── pages/
+                               │       └── hooks/
+                               └── platform/ (framework core)
 ```
 
-### Rule 2: Feature Configuration Template (REQUIRED)
+### Feature Lifecycle
+
+1. **Define Contract** → What does this feature provide/consume?
+2. **Choose State Strategy** → Local state or Redux?
+3. **Build in Isolation** → No external dependencies
+4. **Auto-Integration** → Bloom handles routing, state, discovery
+
+---
+
+## 🏗️ Architecture Deep Dive
+
+### The Contract System (Heart of Bloom)
+
+Every feature MUST have a contract that declares:
+
+- **Provides**: What this feature offers to others (services, hooks, components)
+- **Consumes**: What this feature needs from others (platform hooks, other services)
 
 ```typescript
-import type { BloomFeatureConfig } from '@/platform/types';
-import { createContract, STANDARD_HOOKS } from '@/shared/contracts';
-
-const config: BloomFeatureConfig = {
-  name: 'featureName',
-
-  // Contract: What this feature provides/consumes
-  contract: createContract()
-    .providesComponent('ComponentName')
-    .providesHook('useFeatureName')
-    .consumesHook(STANDARD_HOOKS.USE_ROUTER)
-    .build(),
-
-  // State management choice
-  sharedState: false, // OR true for Redux
-
-  // Redux slices (only if sharedState: true)
-  stateSlices: [...],
-
-  routes: [...],
-  settings: {...},
-  meta: {...}
-};
-
-export default config;
-```
-
-### Rule 3: Contract Patterns (CHOOSE ONE)
-
-```typescript
-// Pattern A: Simple Page Feature (local state)
+// ✅ CORRECT: Feature declares its interface
 contract: createContract()
-  .providesComponent('PageName')
-  .consumesHook(STANDARD_HOOKS.USE_ROUTER)
-  .build(),
+  .providesService('userManager') // I offer user management
+  .providesHook('useUserAuth') // I offer authentication hook
+  .providesComponent('UserDashboard') // I offer dashboard component
+  .consumesHook('useRouter') // I need routing
+  .consumesHook('useApi') // I need API calls
+  .build();
+```
+
+### State Management Philosophy
+
+#### The Two-Strategy Rule
+
+Bloom features follow exactly ONE state strategy:
+
+```typescript
+// Strategy 1: Local State (90% of features)
 sharedState: false
+// - Uses React hooks + localStorage
+// - Perfect for isolated features
+// - No Redux overhead
 
-// Pattern B: Service Feature (with Redux)
-contract: createContract()
-  .providesService('serviceName')
-  .providesHook('useServiceName')
-  .consumesHook(STANDARD_HOOKS.USE_SHARED_STATE)
-  .consumesState('serviceName')
-  .build(),
+// Strategy 2: Redux State (10% of features)
 sharedState: true
-
-// Pattern C: UI Feature (components + hooks)
-contract: createContract()
-  .providesComponent('ComponentName')
-  .providesHook('useComponentName')
-  .consumesHook(STANDARD_HOOKS.USE_THEME)
-  .build(),
-sharedState: false
+stateSlices: [...]
+// - Uses Redux for cross-feature sharing
+// - Only when data must be shared
+// - Automatically lazy-loaded
 ```
 
-### Rule 4: Redux Integration (IF sharedState: true)
+**NEVER mix strategies in a single feature!**
+
+### Performance Architecture
+
+#### Conditional Redux Loading
 
 ```typescript
-// Custom slice template
-stateSlices: [
-  {
-    name: 'featureName',
-    initialState: {
-      data: [],
-      loading: false,
-      error: null,
-      settings: {},
-    },
-    reducers: {
-      setData: (state: any, action: any) => {
-        state.data = action.payload;
-        state.loading = false;
-      },
-      setLoading: (state: any, action: any) => {
-        state.loading = action.payload;
-      },
-      setError: (state: any, action: any) => {
-        state.error = action.payload;
-        state.loading = false;
-      },
-    },
-  },
-];
+// ⚡ SMART: Redux only loads if features actually need it
+const reduxNeeded = features.some((f) => f.sharedState === true);
 
-// OR use templates
-import { createSliceFromTemplate } from '@/platform/state';
-
-stateSlices: [
-  createSliceFromTemplate('LOADING', 'featureName'),
-  createSliceFromTemplate('API_CACHE', 'featureNameCache'),
-];
+if (reduxNeeded) {
+  initializeRedux(); // Only then create store
+} else {
+  skipRedux(); // Zero Redux overhead
+}
 ```
 
-### Rule 5: Hook Patterns (STANDARD structures)
+#### Build-Time Discovery
 
 ```typescript
-// Pattern A: Local State Hook
-export function useFeatureName() {
-  const [state, setState] = useState(initialState);
-  const { get, set } = useBloomStorage();
-
-  // Actions
-  const updateData = useCallback(
-    async (data) => {
-      setState((prev) => ({ ...prev, data }));
-      await set('featureName.data', data);
-    },
-    [set]
-  );
-
-  return {
-    // State
-    state,
-    loading: state.loading,
-
-    // Actions
-    updateData,
-
-    // Utilities
-    isReady: !state.loading,
-  };
-}
-
-// Pattern B: Redux Hook
-export function useFeatureName() {
-  const { state, dispatch } = useSharedState('featureName');
-
-  const updateData = useCallback(
-    (data) => {
-      dispatch({ type: 'featureName/setData', payload: data });
-    },
-    [dispatch]
-  );
-
-  return {
-    // State
-    data: state.data || [],
-    loading: state.loading || false,
-
-    // Actions
-    updateData,
-
-    // Utilities
-    isReady: !!state,
-  };
-}
+// ⚡ OPTIMIZED: Features discovered at build time, not runtime
+const features = [
+  'userDashboard', // Pre-compiled list
+  'quoteManager', // No filesystem scanning
+  'blogSystem', // No dynamic imports in production
+];
 ```
 
 ---
 
-## 📋 Standard Contract Definitions
+## 📋 LLM Decision Framework
 
-### Services (what features provide to others)
-
-```typescript
-STANDARD_SERVICES = {
-  STORAGE: 'storage',
-  API_CLIENT: 'apiClient',
-  AUTH: 'auth',
-  NOTIFICATIONS: 'notifications',
-  ANALYTICS: 'analytics',
-};
-```
-
-### Hooks (what features provide/consume)
-
-```typescript
-STANDARD_HOOKS = {
-  USE_SHARED_STATE: 'useSharedState',
-  USE_API: 'useApi',
-  USE_ROUTER: 'useRouter',
-  USE_AUTH: 'useAuth',
-  USE_THEME: 'useTheme',
-};
-```
-
-### State (Redux slices features consume)
-
-```typescript
-STANDARD_STATE = {
-  APP: 'app',
-  USER: 'user',
-  AUTH: 'auth',
-  UI: 'ui',
-  CACHE: 'cache',
-};
-```
-
----
-
-## 🎯 LLM Decision Trees
-
-### 1. State Management Choice
+### 1. Feature Type Detection
 
 ```
-Does the feature need to share data with other features?
-├── YES → sharedState: true (use Redux)
-│   ├── Complex state → Custom slice
-│   └── Simple state → Use template (LOADING, UI, etc.)
-└── NO → sharedState: false (local state only)
+What type of feature am I building?
+
+├── PAGE FEATURE (displays content)
+│   ├── sharedState: false
+│   ├── contract: providesComponent + consumesHook(useRouter)
+│   └── example: About page, Contact form
+│
+├── SERVICE FEATURE (manages data/state)
+│   ├── sharedState: true
+│   ├── contract: providesService + providesHook + consumesState
+│   └── example: User authentication, Shopping cart
+│
+├── UI FEATURE (reusable components)
+│   ├── sharedState: false
+│   ├── contract: providesComponent + providesHook
+│   └── example: Modal system, Toast notifications
+│
+└── INTEGRATION FEATURE (connects external systems)
+    ├── sharedState: true (usually)
+    ├── contract: providesService + consumesHook(useApi)
+    └── example: Payment processor, Analytics tracker
 ```
 
-### 2. Contract Pattern Selection
+### 2. State Strategy Decision Tree
 
 ```
-What does your feature do?
-├── Displays pages → providesComponent + consumesHook(USE_ROUTER)
-├── Provides data service → providesService + providesHook + consumesState
-├── UI utilities → providesComponent + providesHook
-└── Authentication → providesService(AUTH) + consumesState(AUTH)
+Does my feature need to share data with OTHER features?
+├── NO → sharedState: false
+│   ├── Use: useState, useEffect, useBloomStorage
+│   ├── Perfect for: Pages, forms, local UI state
+│   └── Benefits: Simpler, faster, isolated
+│
+└── YES → sharedState: true
+    ├── Use: Redux slices, useSharedState
+    ├── Perfect for: User auth, shopping cart, global settings
+    └── Benefits: Cross-feature sharing, persistence
 ```
 
-### 3. Redux Slice Templates
+### 3. Contract Pattern Selection
 
 ```
-What kind of state do you need?
-├── Loading/Error/Data → createSliceFromTemplate('LOADING', name)
-├── UI state (modals, theme) → createSliceFromTemplate('UI', name)
-├── API responses → createSliceFromTemplate('API_CACHE', name)
-├── Simple counter → createSliceFromTemplate('COUNTER', name)
-└── Custom logic → Write custom slice
+What does my feature DO?
+
+├── Displays Pages
+│   └── contract: createContract()
+│         .providesComponent('PageName')
+│         .consumesHook('useRouter')
+│         .build()
+│
+├── Manages Data/Service
+│   └── contract: createContract()
+│         .providesService('serviceName')
+│         .providesHook('useServiceName')
+│         .consumesHook('useSharedState')
+│         .consumesState('serviceName')
+│         .build()
+│
+├── Provides UI Components
+│   └── contract: createContract()
+│         .providesComponent('ComponentName')
+│         .providesHook('useComponentName')
+│         .consumesHook('useTheme')
+│         .build()
+│
+└── Integrates External System
+    └── contract: createContract()
+          .providesService('integrationName')
+          .providesHook('useIntegrationName')
+          .consumesHook('useApi')
+          .build()
 ```
 
 ---
 
 ## 🔧 Complete Feature Templates
 
-### 1. Simple Page Feature (Local State)
+### Template 1: Page Feature (Local State)
 
 ```typescript
 /**
- * [FeatureName] Feature - Simple page with local state
+ * Simple page with local state management
+ * Use for: Static pages, contact forms, about pages
  */
 import type { BloomFeatureConfig } from '@/platform/types';
-import { createContract, STANDARD_HOOKS } from '@/shared/contracts';
+import { createContract } from '@/shared/contracts';
 
 const config: BloomFeatureConfig = {
-  name: 'featureName',
+  name: 'myPageFeature',
 
+  // ✅ Contract: Only provides page component
   contract: createContract()
-    .providesComponent('FeatureNamePage')
-    .consumesHook(STANDARD_HOOKS.USE_ROUTER)
+    .providesComponent('MyPage')
+    .consumesHook('useRouter') // Platform provides this
     .build(),
 
+  // ✅ Local state only
   sharedState: false,
 
   routes: [
     {
-      path: '/feature-name',
-      component: () => import('./pages/FeatureNamePage'),
-      layout: 'default',
-      title: 'Feature Name',
-      meta: {
-        description: 'Feature description',
-        keywords: 'feature, keywords',
-      },
-      ssg: true,
+      path: '/my-page',
+      component: () => import('./pages/MyPage'),
+      layout: 'page', // Use page layout
+      title: 'My Page',
+      ssg: true, // Static generation
     },
   ],
 
   settings: {
     enabled: {
-      key: 'featureName.enabled',
+      key: 'myPageFeature.enabled',
       default: true,
       type: 'boolean',
-      label: 'Enable Feature',
+      label: 'Enable My Page',
     },
   },
 
   meta: {
-    name: 'Feature Name',
-    description: 'Feature description',
+    name: 'My Page Feature',
+    description: 'Simple page with local state',
     version: '1.0.0',
     author: 'Developer',
   },
@@ -297,48 +248,47 @@ const config: BloomFeatureConfig = {
 export default config;
 ```
 
-### 2. Redux Service Feature
+### Template 2: Service Feature (Redux State)
 
 ```typescript
 /**
- * [FeatureName] Feature - Service with Redux state
+ * Data management service with Redux
+ * Use for: User auth, shopping cart, global data
  */
 import type { BloomFeatureConfig } from '@/platform/types';
-import {
-  createContract,
-  STANDARD_HOOKS,
-  STANDARD_STATE,
-} from '@/shared/contracts';
+import { createContract } from '@/shared/contracts';
 
 const config: BloomFeatureConfig = {
-  name: 'featureName',
+  name: 'myServiceFeature',
 
+  // ✅ Contract: Provides service + hook, consumes Redux
   contract: createContract()
-    .providesService('featureNameService')
-    .providesHook('useFeatureName')
-    .providesComponent('FeatureNamePage')
-    .consumesHook(STANDARD_HOOKS.USE_SHARED_STATE)
-    .consumesHook(STANDARD_HOOKS.USE_API)
-    .consumesState('featureName')
+    .providesService('myService')
+    .providesHook('useMyService')
+    .providesComponent('MyServicePage')
+    .consumesHook('useSharedState') // Platform provides this
+    .consumesHook('useApi') // Platform provides this
+    .consumesState('myService') // This feature's state
     .build(),
 
+  // ✅ Redux shared state
   sharedState: true,
 
   stateSlices: [
     {
-      name: 'featureName',
+      name: 'myService',
       initialState: {
-        items: [],
+        data: [],
         loading: false,
         error: null,
         settings: {
-          enabled: true,
-          limit: 10,
+          autoSync: true,
+          refreshRate: 30000,
         },
       },
       reducers: {
-        setItems: (state: any, action: any) => {
-          state.items = action.payload;
+        setData: (state: any, action: any) => {
+          state.data = action.payload;
           state.loading = false;
           state.error = null;
         },
@@ -358,11 +308,11 @@ const config: BloomFeatureConfig = {
 
   routes: [
     {
-      path: '/feature-name',
-      component: () => import('./pages/FeatureNamePage'),
-      layout: 'default',
-      title: 'Feature Name',
-      ssg: false,
+      path: '/my-service',
+      component: () => import('./pages/MyServicePage'),
+      layout: 'admin',
+      title: 'My Service',
+      ssg: false, // Dynamic content
     },
   ],
 
@@ -370,202 +320,161 @@ const config: BloomFeatureConfig = {
     baseUrl: 'https://api.example.com',
     endpoints: {
       list: '/items',
-      get: '/items/:id',
+      create: '/items',
+      update: '/items/:id',
     },
     timeout: 10000,
-  },
-
-  meta: {
-    name: 'Feature Name Service',
-    description: 'Feature with Redux state management',
-    version: '1.0.0',
-    author: 'Developer',
   },
 };
 
 export default config;
 ```
 
-### 3. Page Component Template
+### Template 3: UI Component Feature
 
 ```typescript
 /**
- * [FeatureName] Page Component
+ * Reusable UI components with local state
+ * Use for: Modal systems, toast notifications, UI widgets
  */
-import React from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@voilajsx/uikit/card';
-import { Button } from '@voilajsx/uikit/button';
-import { Badge } from '@voilajsx/uikit/badge';
-import { useFeatureName } from '../hooks/useFeatureName';
+const config: BloomFeatureConfig = {
+  name: 'myUIFeature',
 
-export default function FeatureNamePage() {
-  const { state, loading, updateData, isReady } = useFeatureName();
+  contract: createContract()
+    .providesComponent('MyModal')
+    .providesComponent('MyToast')
+    .providesHook('useMyModal')
+    .providesHook('useMyToast')
+    .consumesHook('useTheme') // Platform provides this
+    .build(),
 
-  return (
-    <div className="space-y-16">
-      {/* Header */}
-      <section className="py-16 px-8 text-center">
-        <Badge variant="secondary" className="mb-6">
-          Feature Name
-        </Badge>
-        <h1 className="text-5xl font-bold mb-6">
-          <span className="bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
-            Page Title
-          </span>
-        </h1>
-        <p className="text-xl text-muted-foreground max-w-3xl mx-auto">
-          Page description and purpose.
-        </p>
-      </section>
+  sharedState: false, // UI state is usually local
 
-      {/* Content */}
-      <section className="py-16 px-8">
-        <div className="max-w-4xl mx-auto">
-          <Card>
-            <CardHeader>
-              <CardTitle>Feature Content</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {loading ? (
-                <p>Loading...</p>
-              ) : (
-                <div>
-                  <p>Feature is ready: {isReady ? 'Yes' : 'No'}</p>
-                  <Button onClick={() => updateData('new data')}>
-                    Update Data
-                  </Button>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </div>
-      </section>
-    </div>
-  );
-}
+  // No routes - this is a component library
+  routes: [],
+
+  meta: {
+    name: 'My UI Components',
+    description: 'Reusable UI components',
+    version: '1.0.0',
+  },
+};
 ```
 
-### 4. Hook Template (Local State)
+---
+
+## 🎨 Hook Patterns (The Bloom Way)
+
+### Pattern 1: Local State Hook
 
 ```typescript
 /**
- * [FeatureName] Hook - Local state management
+ * Local state hook - perfect for isolated features
+ * Use with: sharedState: false
  */
-import { useState, useEffect, useCallback } from 'react';
-import { useBloomStorage } from '@/shared/hooks/useBloomStorage';
-import { useApi } from '@/shared/hooks/useApi';
+export function useMyFeature() {
+  const { get, set } = useBloomStorage(); // Platform provides this
+  const { apiGet } = useBloomApi(); // Platform provides this
 
-interface FeatureNameState {
-  items: any[];
-  loading: boolean;
-  error: string | null;
-  settings: {
-    enabled: boolean;
-    limit: number;
-  };
-}
-
-export function useFeatureName() {
-  const { get, set } = useBloomStorage();
-  const { apiGet } = useApi();
-
-  const [state, setState] = useState<FeatureNameState>({
-    items: [],
+  const [state, setState] = useState({
+    data: [],
     loading: false,
     error: null,
-    settings: {
-      enabled: true,
-      limit: 10,
-    },
+    settings: { autoRefresh: true },
   });
 
-  // Load initial data
-  useEffect(() => {
-    loadData();
-  }, []);
-
+  // ✅ Load data with error handling
   const loadData = useCallback(async () => {
     setState((prev) => ({ ...prev, loading: true, error: null }));
 
     try {
-      const response = await apiGet('/api/items');
+      const response = await apiGet('/api/data');
       if (response.success) {
         setState((prev) => ({
           ...prev,
-          items: response.data,
+          data: response.data,
           loading: false,
         }));
+        // ✅ Auto-persist to localStorage
+        await set('myFeature.data', response.data);
       } else {
-        throw new Error(response.error || 'Failed to load data');
+        throw new Error(response.error || 'Failed to load');
       }
-    } catch (error) {
+    } catch (error: any) {
       setState((prev) => ({
         ...prev,
         error: error.message,
         loading: false,
       }));
     }
-  }, [apiGet]);
+  }, [apiGet, set]);
 
-  const updateData = useCallback(
-    async (newData: any) => {
-      setState((prev) => ({ ...prev, items: [...prev.items, newData] }));
-      await set('featureName.items', state.items);
+  // ✅ Update setting with persistence
+  const updateSetting = useCallback(
+    async (key: string, value: any) => {
+      setState((prev) => ({
+        ...prev,
+        settings: { ...prev.settings, [key]: value },
+      }));
+      await set(`myFeature.settings.${key}`, value);
     },
-    [set, state.items]
+    [set]
   );
 
   return {
     // State
-    items: state.items,
+    data: state.data,
     loading: state.loading,
     error: state.error,
     settings: state.settings,
 
     // Actions
     loadData,
-    updateData,
+    updateSetting,
 
     // Utilities
     isReady: !state.loading && !state.error,
-    hasItems: state.items.length > 0,
+    hasData: state.data.length > 0,
   };
 }
 ```
 
-### 5. Hook Template (Redux State)
+### Pattern 2: Redux State Hook
 
 ```typescript
 /**
- * [FeatureName] Hook - Redux state management
+ * Redux state hook - perfect for shared features
+ * Use with: sharedState: true
  */
-import { useCallback } from 'react';
-import { useSharedState } from '@/shared/hooks/useSharedState';
-import { useApi } from '@/shared/hooks/useApi';
-
-export function useFeatureName() {
-  const { state, dispatch, isReady } = useSharedState('featureName');
-  const { apiGet } = useApi();
+export function useMyService() {
+  const { state, dispatch } = useSharedState('myService'); // Platform provides this
+  const { apiGet } = useBloomApi();
 
   const loadData = useCallback(async () => {
-    dispatch({ type: 'featureName/setLoading', payload: true });
+    dispatch({ type: 'myService/setLoading', payload: true });
 
     try {
-      const response = await apiGet('/api/items');
+      const response = await apiGet('/api/service-data');
       if (response.success) {
-        dispatch({ type: 'featureName/setItems', payload: response.data });
+        dispatch({
+          type: 'myService/setData',
+          payload: response.data,
+        });
       } else {
-        throw new Error(response.error || 'Failed to load data');
+        throw new Error(response.error || 'Failed to load');
       }
-    } catch (error) {
-      dispatch({ type: 'featureName/setError', payload: error.message });
+    } catch (error: any) {
+      dispatch({
+        type: 'myService/setError',
+        payload: error.message,
+      });
     }
   }, [dispatch, apiGet]);
 
   const updateSetting = useCallback(
     (key: string, value: any) => {
       dispatch({
-        type: 'featureName/updateSetting',
+        type: 'myService/updateSetting',
         payload: { key, value },
       });
     },
@@ -573,8 +482,8 @@ export function useFeatureName() {
   );
 
   return {
-    // State
-    items: state?.items || [],
+    // State (from Redux)
+    data: state?.data || [],
     loading: state?.loading || false,
     error: state?.error || null,
     settings: state?.settings || {},
@@ -584,43 +493,136 @@ export function useFeatureName() {
     updateSetting,
 
     // Utilities
-    isReady: isReady && !state?.loading,
-    hasItems: (state?.items || []).length > 0,
+    isReady: !!state && !state.loading,
+    hasData: (state?.data || []).length > 0,
   };
 }
 ```
 
 ---
 
-## ⚠️ Critical Rules for LLMs
+## 📄 Page Component Patterns
 
-### 1. ALWAYS Use Semantic Colors
+### Standard Page Structure
+
+```typescript
+/**
+ * Standard Bloom page component
+ * Always follows this structure for consistency
+ */
+import React from 'react';
+import { Card, CardContent, CardHeader, CardTitle } from '@voilajsx/uikit/card';
+import { Button } from '@voilajsx/uikit/button';
+import { Badge } from '@voilajsx/uikit/badge';
+import { Alert, AlertDescription } from '@voilajsx/uikit/alert';
+import { useMyFeature } from '../hooks/useMyFeature';
+
+export default function MyFeaturePage() {
+  const { data, loading, error, loadData, isReady } = useMyFeature();
+
+  return (
+    <div className="space-y-16">
+      {/* 1. Header Section (ALWAYS include) */}
+      <section className="py-16 px-8 text-center">
+        <Badge variant="secondary" className="mb-6">
+          Feature Category
+        </Badge>
+        <h1 className="text-5xl font-bold mb-6">
+          <span className="bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
+            Page Title
+          </span>
+        </h1>
+        <p className="text-xl text-muted-foreground max-w-3xl mx-auto">
+          Clear description of what this page does and why it's useful.
+        </p>
+      </section>
+
+      {/* 2. Error Handling (ALWAYS include if API calls) */}
+      {error && (
+        <div className="max-w-4xl mx-auto px-8">
+          <Alert variant="destructive">
+            <AlertDescription>{error}. Please try again.</AlertDescription>
+          </Alert>
+        </div>
+      )}
+
+      {/* 3. Main Content */}
+      <section className="py-16 px-8">
+        <div className="max-w-4xl mx-auto">
+          {/* Loading State */}
+          {loading ? (
+            <Card>
+              <CardContent className="p-12 text-center">
+                <div className="animate-spin w-8 h-8 border-2 border-primary border-t-transparent rounded-full mx-auto mb-4"></div>
+                <p className="text-muted-foreground">Loading...</p>
+              </CardContent>
+            </Card>
+          ) : (
+            /* Content State */
+            <Card>
+              <CardHeader>
+                <CardTitle>Content Title</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {/* Your feature content here */}
+                <div className="space-y-4">
+                  <p>Ready state: {isReady ? 'Yes' : 'No'}</p>
+                  <p>Data items: {data.length}</p>
+                  <Button onClick={loadData}>Refresh Data</Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </div>
+      </section>
+
+      {/* 4. Actions Section (if needed) */}
+      <section className="py-8 px-8">
+        <div className="max-w-4xl mx-auto text-center">
+          <Button onClick={loadData} disabled={loading}>
+            Primary Action
+          </Button>
+        </div>
+      </section>
+    </div>
+  );
+}
+```
+
+---
+
+## 🎯 Critical LLM Rules (ALWAYS Follow)
+
+### Rule 1: ALWAYS Use Semantic Colors
 
 ```typescript
 // ✅ CORRECT - Works with all themes
 className = 'bg-background text-foreground border-border';
 className = 'bg-card text-card-foreground';
 className = 'bg-primary text-primary-foreground';
+className = 'bg-muted text-muted-foreground';
+className = 'bg-destructive text-destructive-foreground';
 
 // ❌ WRONG - Breaks with themes
 className = 'bg-white text-black border-gray-200';
 className = 'bg-blue-500 text-white';
+className = 'bg-red-600 text-white';
 ```
 
-### 2. ALWAYS Include Contract
+### Rule 2: ALWAYS Include Feature Contract
 
 ```typescript
 // ✅ CORRECT - Every feature needs a contract
 contract: createContract()
   .providesComponent('ComponentName')
-  .consumesHook(STANDARD_HOOKS.USE_ROUTER)
+  .consumesHook('useRouter')
   .build(),
 
 // ❌ WRONG - Missing contract
 // contract: undefined
 ```
 
-### 3. ALWAYS Choose State Management Pattern
+### Rule 3: ALWAYS Choose ONE State Strategy
 
 ```typescript
 // ✅ CORRECT - Explicit choice
@@ -629,105 +631,414 @@ sharedState: false,  // Local state
 sharedState: true,   // Redux state
 stateSlices: [...]
 
-// ❌ WRONG - Undefined state management
+// ❌ WRONG - Undefined or mixed
 // sharedState: undefined
 ```
 
-### 4. ALWAYS Import from Correct Paths
+### Rule 4: ALWAYS Import from Correct Paths
 
 ```typescript
 // ✅ CORRECT - Bloom Framework imports
 import { createContract } from '@/shared/contracts';
 import { useSharedState } from '@/shared/hooks/useSharedState';
 import { useBloomStorage } from '@/shared/hooks/useBloomStorage';
+import { useBloomApi } from '@/shared/hooks/useBloomApi';
 
-// UIKit imports
+// ✅ CORRECT - UIKit imports
 import { Button } from '@voilajsx/uikit/button';
-import { Card } from '@voilajsx/uikit/card';
+import { Card, CardContent } from '@voilajsx/uikit/card';
+import { Badge } from '@voilajsx/uikit/badge';
+
+// ❌ WRONG - Never import between features
+import { useOtherFeature } from '@/features/other-feature/hooks';
 ```
 
-### 5. ALWAYS Follow File Structure
+### Rule 5: ALWAYS Follow File Structure
 
 ```
-src/features/feature-name/
+src/features/my-feature/
 ├── index.ts              // ✅ Feature config with contract
-├── pages/FeaturePage.tsx // ✅ Page components
-├── hooks/useFeature.ts   // ✅ Business logic
-└── components/           // ✅ Reusable components
+├── pages/                // ✅ Page components
+│   └── MyFeaturePage.tsx
+├── hooks/                // ✅ Business logic
+│   └── useMyFeature.ts
+└── components/           // ✅ Reusable UI components
+    └── MyComponent.tsx
 ```
 
 ---
 
-## 🚀 Quick Start Checklist
+## 🚀 Redux Slice Patterns
 
-### ✅ For Every New Feature:
+### Custom Slice Template
 
-1. **Choose pattern**: Page, Service, or UI feature
-2. **Define contract**: What you provide/consume
-3. **Choose state**: Local (`sharedState: false`) or Redux (`sharedState: true`)
-4. **Write config**: Use templates above
-5. **Create hook**: Follow hook patterns
-6. **Build pages**: Use semantic colors
-7. **Test contract**: Ensure dependencies exist
+```typescript
+/**
+ * Custom Redux slice for complex state management
+ */
+{
+  name: 'myFeature',
+  initialState: {
+    // Core data
+    items: [],
+    selectedItem: null,
 
-### ✅ For Redux Features:
+    // UI state
+    loading: false,
+    error: null,
 
-1. **Define slices**: Custom or template-based
-2. **Use useSharedState**: For accessing Redux state
-3. **Dispatch actions**: `dispatch({ type: 'slice/action', payload: data })`
-4. **Handle loading**: Use loading/error patterns
+    // Settings
+    settings: {
+      sortBy: 'name',
+      filterBy: 'all',
+      pageSize: 10
+    },
 
-### ✅ For Local State Features:
+    // Metadata
+    lastUpdated: null,
+    totalCount: 0
+  },
+  reducers: {
+    // Data actions
+    setItems: (state: any, action: any) => {
+      state.items = action.payload;
+      state.loading = false;
+      state.error = null;
+      state.lastUpdated = Date.now();
+    },
+    addItem: (state: any, action: any) => {
+      state.items.push(action.payload);
+      state.totalCount += 1;
+    },
+    updateItem: (state: any, action: any) => {
+      const index = state.items.findIndex((item: any) => item.id === action.payload.id);
+      if (index !== -1) {
+        state.items[index] = { ...state.items[index], ...action.payload };
+      }
+    },
+    removeItem: (state: any, action: any) => {
+      state.items = state.items.filter((item: any) => item.id !== action.payload);
+      state.totalCount -= 1;
+    },
 
-1. **Use useBloomStorage**: For persistence
-2. **Use useState**: For component state
-3. **Use useApi**: For API calls
-4. **Handle errors**: Try/catch with state updates
+    // Selection actions
+    selectItem: (state: any, action: any) => {
+      state.selectedItem = action.payload;
+    },
+    clearSelection: (state: any) => {
+      state.selectedItem = null;
+    },
+
+    // UI actions
+    setLoading: (state: any, action: any) => {
+      state.loading = action.payload;
+    },
+    setError: (state: any, action: any) => {
+      state.error = action.payload;
+      state.loading = false;
+    },
+    clearError: (state: any) => {
+      state.error = null;
+    },
+
+    // Settings actions
+    updateSetting: (state: any, action: any) => {
+      state.settings[action.payload.key] = action.payload.value;
+    },
+    resetSettings: (state: any) => {
+      state.settings = {
+        sortBy: 'name',
+        filterBy: 'all',
+        pageSize: 10
+      };
+    }
+  }
+}
+```
+
+### Using Slice Templates
+
+```typescript
+import { createSliceFromTemplate } from '@/platform/state';
+
+// ✅ Use templates for common patterns
+stateSlices: [
+  createSliceFromTemplate('LOADING', 'myFeatureLoading'), // Loading/error/data
+  createSliceFromTemplate('UI', 'myFeatureUI'), // Modals/sidebar/theme
+  createSliceFromTemplate('API_CACHE', 'myFeatureCache'), // API response cache
+  createSliceFromTemplate('COUNTER', 'myFeatureCounter'), // Simple counter
+];
+```
 
 ---
 
-## 🎯 LLM Success Patterns
+## 🔄 Common Feature Scenarios
 
-### Pattern 1: Always Start with Contract
+### Scenario 1: Contact Form Feature
 
 ```typescript
-// 1. Define what feature provides/consumes
-// 2. Choose state management approach
-// 3. Write routes and components
-// 4. Implement business logic
+// Decision: Page feature with local state
+// Reasoning: Form data doesn't need to be shared
 
+const config: BloomFeatureConfig = {
+  name: 'contactForm',
+
+  contract: createContract()
+    .providesComponent('ContactPage')
+    .consumesHook('useRouter')
+    .consumesHook('useApi') // For form submission
+    .build(),
+
+  sharedState: false, // Form data is local
+
+  routes: [
+    {
+      path: '/contact',
+      component: () => import('./pages/ContactPage'),
+      layout: 'page',
+      title: 'Contact Us',
+      ssg: true, // Static page structure
+    },
+  ],
+};
+```
+
+### Scenario 2: User Authentication Feature
+
+```typescript
+// Decision: Service feature with Redux
+// Reasoning: Auth state must be shared across features
+
+const config: BloomFeatureConfig = {
+  name: 'userAuth',
+
+  contract: createContract()
+    .providesService('authService')
+    .providesHook('useAuth')
+    .providesComponent('LoginPage')
+    .consumesHook('useSharedState')
+    .consumesHook('useApi')
+    .consumesState('userAuth')
+    .build(),
+
+  sharedState: true, // Auth state is global
+
+  stateSlices: [
+    {
+      name: 'userAuth',
+      initialState: {
+        user: null,
+        token: null,
+        isAuthenticated: false,
+        loading: false,
+        error: null,
+      },
+      reducers: {
+        loginStart: (state: any) => {
+          state.loading = true;
+          state.error = null;
+        },
+        loginSuccess: (state: any, action: any) => {
+          state.user = action.payload.user;
+          state.token = action.payload.token;
+          state.isAuthenticated = true;
+          state.loading = false;
+        },
+        loginError: (state: any, action: any) => {
+          state.error = action.payload;
+          state.loading = false;
+        },
+        logout: (state: any) => {
+          state.user = null;
+          state.token = null;
+          state.isAuthenticated = false;
+        },
+      },
+    },
+  ],
+};
+```
+
+### Scenario 3: Blog Management Feature
+
+```typescript
+// Decision: Service feature with Redux + Page components
+// Reasoning: Blog data shared between admin and public views
+
+const config: BloomFeatureConfig = {
+  name: 'blogManager',
+
+  contract: createContract()
+    .providesService('blogService')
+    .providesHook('useBlog')
+    .providesComponent('BlogListPage')
+    .providesComponent('BlogPostPage')
+    .providesComponent('BlogAdminPage')
+    .consumesHook('useSharedState')
+    .consumesHook('useApi')
+    .consumesHook('useAuth') // Depends on auth for admin
+    .consumesState('blogManager')
+    .build(),
+
+  sharedState: true, // Blog data shared across pages
+
+  stateSlices: [
+    {
+      name: 'blogManager',
+      initialState: {
+        posts: [],
+        categories: [],
+        selectedPost: null,
+        loading: false,
+        error: null,
+        filters: {
+          category: 'all',
+          status: 'published',
+        },
+      },
+      reducers: {
+        setPosts: (state: any, action: any) => {
+          state.posts = action.payload;
+          state.loading = false;
+        },
+        setCategories: (state: any, action: any) => {
+          state.categories = action.payload;
+        },
+        selectPost: (state: any, action: any) => {
+          state.selectedPost = action.payload;
+        },
+        updateFilter: (state: any, action: any) => {
+          state.filters[action.payload.key] = action.payload.value;
+        },
+      },
+    },
+  ],
+
+  routes: [
+    {
+      path: '/blog',
+      component: () => import('./pages/BlogListPage'),
+      layout: 'page',
+      title: 'Blog',
+      ssg: true,
+    },
+    {
+      path: '/blog/:slug',
+      component: () => import('./pages/BlogPostPage'),
+      layout: 'page',
+      title: 'Blog Post',
+      ssg: false, // Dynamic content
+    },
+    {
+      path: '/admin/blog',
+      component: () => import('./pages/BlogAdminPage'),
+      layout: 'admin',
+      title: 'Blog Management',
+      ssg: false,
+    },
+  ],
+};
+```
+
+---
+
+## 🧪 Testing Your Features
+
+### Contract Validation
+
+```typescript
+// Bloom automatically validates contracts
+// Check console for validation errors:
+// ❌ "Service 'userAuth' is consumed but not provided by any feature"
+// ✅ "All contracts valid"
+```
+
+### State Strategy Validation
+
+```typescript
+// Check Redux loading:
+// ✅ "Skipping Redux (no features need shared state)"
+// ✅ "Redux initialized for shared state features"
+```
+
+### Feature Loading Debug
+
+```typescript
+// Check feature discovery:
+// ✅ "Processing 3 features: userAuth, blogManager, contactForm"
+// ✅ "userAuth: 2 routes + Redux"
+// ✅ "contactForm: 1 route"
+```
+
+---
+
+## 💡 LLM Success Patterns
+
+### Pattern 1: Start with Contract
+
+```typescript
+// Always begin feature creation with contract design
 contract: createContract()
-  .providesComponent('ComponentName')
-  .consumesHook(STANDARD_HOOKS.USE_ROUTER)
-  .build(),
+  .provides??? // What does this feature offer?
+  .consumes??? // What does this feature need?
+  .build()
 ```
 
-### Pattern 2: Always Use Templates
+### Pattern 2: State Strategy First
 
 ```typescript
-// 1. Use slice templates when possible
-// 2. Use contract builder methods
-// 3. Use hook patterns from guide
-// 4. Use page component structure
-
-stateSlices: [createSliceFromTemplate('LOADING', 'featureName')];
+// Decide state strategy before writing any code
+const needsSharing = // Will other features use this data?
+sharedState: needsSharing ? true : false
 ```
 
-### Pattern 3: Always Handle State Correctly
+### Pattern 3: Follow File Structure
 
 ```typescript
-// 1. Choose local OR Redux (never both)
-// 2. Use appropriate hooks
-// 3. Handle loading/error states
-// 4. Persist settings when needed
+// Always create this exact structure
+src/features/my-feature/
+├── index.ts          // Feature config
+├── pages/            // UI components for routes
+├── hooks/            // Business logic
+└── components/       // Reusable UI components
+```
 
-// Local state
-const { state, loading } = useFeatureName();
+### Pattern 4: Use Platform Hooks
 
-// Redux state
-const { state, dispatch } = useSharedState('featureName');
+```typescript
+// Always use Bloom platform hooks, never create your own
+const { get, set } = useBloomStorage(); // For persistence
+const { apiGet, apiPost } = useBloomApi(); // For HTTP requests
+const { state, dispatch } = useSharedState('featureName'); // For Redux
 ```
 
 ---
 
-This guide ensures LLMs generate consistent, contract-based features that integrate seamlessly with Bloom Framework's architecture. Following these patterns guarantees 100% compatibility and scalability.
+## 🎯 Final LLM Checklist
+
+Before completing any Bloom feature, verify:
+
+- [ ] ✅ Feature has a valid contract
+- [ ] ✅ State strategy is explicitly chosen (local OR Redux)
+- [ ] ✅ All imports use correct Bloom paths
+- [ ] ✅ All colors use semantic classes
+- [ ] ✅ File structure follows Bloom conventions
+- [ ] ✅ Page components follow standard structure
+- [ ] ✅ Hooks follow Bloom patterns
+- [ ] ✅ No direct feature-to-feature imports
+- [ ] ✅ Error handling is implemented
+- [ ] ✅ Loading states are handled
+
+---
+
+## 🌸 The Bloom Advantage
+
+By following these patterns, you get:
+
+1. **10x Faster Development** - Predictable patterns mean AI can generate perfect code
+2. **Zero Integration Issues** - Contracts prevent breaking changes
+3. **Perfect Performance** - Lazy loading and conditional Redux
+4. **Infinite Scalability** - Features remain isolated as your app grows
+5. **Team Harmony** - Everyone follows the same patterns
+
+**Remember: Bloom isn't just a framework, it's a philosophy of building truly modular applications that scale infinitely while maintaining perfect isolation and integration.**
