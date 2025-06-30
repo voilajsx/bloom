@@ -1,27 +1,26 @@
 /**
- * Bloom Framework - Main application entry point with correct router order
+ * Bloom Framework - Clean main.ts without duplicate ThemeProvider
  * @module @voilajsx/bloom
  * @file src/main.ts
  */
 
 import React from 'react'
 import ReactDOM from 'react-dom/client'
-import { ThemeProvider } from '@voilajsx/uikit/theme-provider'
+// ✅ Keep the styles import
 import '@voilajsx/uikit/styles'
 import '@/assets/styles/globals.css'
 import App from './app'
-import defaults from '@/defaults'
+
+// 🔧 REMOVED: ThemeProvider import and usage
+// The ThemeProvider is already handled in layout.tsx
 
 // Initialize Bloom Framework
 console.log('🌸 Bloom Framework initializing...')
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   React.createElement(React.StrictMode, null,
-    React.createElement(ThemeProvider, {
-      theme: defaults['app-theme'] || 'studio',
-      mode: defaults['app-mode'] || 'light',
-      detectSystem: true,
-      children: React.createElement(App)
-    })
+    // 🔧 CLEAN: Just render the App directly
+    // ThemeProvider is handled in BloomLayoutWrapper
+    React.createElement(App)
   )
 )

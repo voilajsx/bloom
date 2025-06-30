@@ -33,10 +33,19 @@ export async function runSSG(args) {
     `${symbols.performance} Enhanced meta tags`,
     `${symbols.security} Security headers included`,
     `${symbols.target} Sitemap & robots.txt`,
+    `${symbols.sparkles} Cache clearing included`,
   ]);
 
   try {
-    // Step 1: Run vite build first
+    // Step 0: Clear caches first to prevent base path issues
+    log(
+      `${symbols.lightning} Clearing caches to prevent base path issues...`,
+      'white'
+    );
+    await clearBuildCaches();
+    logSuccess('All caches cleared');
+
+    // Step 1: Run vite build
     log(`${symbols.lightning} Building production bundle...`, 'white');
 
     const buildArgs = [...args.filter((arg) => !arg.startsWith('--bloom'))];
@@ -146,6 +155,30 @@ export async function runSSG(args) {
     }
 
     process.exit(1);
+  }
+}
+
+/**
+ * Clear build caches to prevent base path issues
+ */
+async function clearBuildCaches() {
+  const cachesToClear = [
+    'dist',
+    '.vite',
+    'node_modules/.vite',
+    'node_modules/.cache',
+  ];
+
+  for (const cacheDir of cachesToClear) {
+    const cachePath = path.join(process.cwd(), cacheDir);
+    if (fs.existsSync(cachePath)) {
+      try {
+        fs.rmSync(cachePath, { recursive: true, force: true });
+        console.log(`  🗑️  Cleared: ${cacheDir}`);
+      } catch (error) {
+        console.warn(`  ⚠️  Could not clear ${cacheDir}:`, error.message);
+      }
+    }
   }
 }
 
@@ -456,6 +489,37 @@ async function generateSEOOptimizedHTML(route, assets, appConfig) {
       : ''
   }
   
+  <!-- Skip link styles for accessibility and loading optimization -->
+  <style>
+    .bloom-skip-link {
+      position: absolute;
+      top: -40px;
+      left: 6px;
+      background: #000;
+      color: #fff;
+      padding: 8px;
+      text-decoration: none;
+      border-radius: 4px;
+      z-index: 9999;
+      transition: top 0.3s;
+    }
+    .bloom-skip-link:focus {
+      top: 6px;
+    }
+    /* Ensure smooth transition when React takes over */
+    #root {
+      min-height: 100vh;
+    }
+    .bloom-loading {
+      opacity: 1;
+      transition: opacity 0.3s ease-out;
+    }
+    /* Hide loading state once React mounts */
+    #root:not(:empty) .bloom-loading {
+      display: none;
+    }
+  </style>
+  
   <!-- Preload Critical Resources with base path -->
   ${
     assets.mainJS
@@ -469,15 +533,13 @@ async function generateSEOOptimizedHTML(route, assets, appConfig) {
   
   <!-- Main App Container -->
   <div id="root">
-    <!-- SEO-Friendly Loading State -->
-    <main id="main-content" class="min-h-screen flex items-center justify-center bg-background">
-      <div class="text-center max-w-md mx-auto p-6">
-        <div class="text-6xl mb-6" role="img" aria-label="Bloom Framework">🌸</div>
-        <h1 class="text-2xl font-bold mb-4 text-foreground">${pageTitle}</h1>
-        <p class="text-muted-foreground mb-6">${pageDescription}</p>
-        <div class="text-sm text-muted-foreground">Loading interactive content...</div>
+    <!-- Minimal SEO-Friendly Loading State -->
+    <div class="bloom-loading min-h-screen flex items-center justify-center" style="background: hsl(var(--background));">
+      <div class="text-center p-6">
+        <div class="text-4xl mb-4">🌸</div>
+        <div class="text-sm animate-pulse" style="color: hsl(var(--muted-foreground));">Loading...</div>
       </div>
-    </main>
+    </div>
   </div>
   
   <!-- Scripts with base path -->

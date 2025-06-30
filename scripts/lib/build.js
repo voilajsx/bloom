@@ -1,5 +1,5 @@
 /**
- * Bloom Framework - Production Build
+ * Bloom Framework - Production Build with Cache Clearing
  * @file scripts/lib/build.js
  */
 
@@ -17,6 +17,38 @@ import {
 } from './utils.js';
 
 /**
+ * Clear build caches to prevent base path issues
+ */
+async function clearBuildCaches() {
+  const cachesToClear = [
+    'dist',
+    '.vite',
+    'node_modules/.vite',
+    'node_modules/.cache',
+  ];
+
+  for (const cacheDir of cachesToClear) {
+    const cachePath = path.join(process.cwd(), cacheDir);
+    if (fs.existsSync(cachePath)) {
+      try {
+        fs.rmSync(cachePath, { recursive: true, force: true });
+        console.log(`  🗑️  Cleared: ${cacheDir}`);
+      } catch (error) {
+        console.warn(`  ⚠️  Could not clear ${cacheDir}:`, error.message);
+      }
+    }
+  }
+
+  // Also clear npm cache if needed
+  try {
+    execSync('npm cache clean --force', { stdio: 'pipe' });
+    console.log(`  🗑️  Cleared: npm cache`);
+  } catch (error) {
+    console.warn(`  ⚠️  Could not clear npm cache:`, error.message);
+  }
+}
+
+/**
  * Build for production
  */
 export async function runBuild(args) {
@@ -28,22 +60,19 @@ export async function runBuild(args) {
     `${symbols.lightning} Optimized bundle splitting`,
     `${symbols.performance} Performance optimizations`,
     `${symbols.security} Security headers included`,
+    `${symbols.sparkles} Cache clearing included`,
   ]);
 
   try {
-    // Pre-build checks
-    log(`${symbols.bloom} Running pre-build checks...`, 'white');
+    // Pre-build checks and cache clearing
+    log(
+      `${symbols.bloom} Running pre-build checks and cache clearing...`,
+      'white'
+    );
 
     await runPreBuildChecks();
-    logSuccess('Pre-build checks passed');
-
-    // Clean previous build
-    log(`${symbols.code} Cleaning previous build...`, 'white');
-    const distDir = path.join(process.cwd(), 'dist');
-    if (fs.existsSync(distDir)) {
-      fs.rmSync(distDir, { recursive: true, force: true });
-    }
-    logSuccess('Previous build cleaned');
+    await clearBuildCaches();
+    logSuccess('Pre-build checks and cache clearing completed');
 
     // Run Vite build
     log(`${symbols.fire} Building optimized bundle...`, 'white');
@@ -80,6 +109,7 @@ export async function runBuild(args) {
         `${symbols.fire} Bundle size: ${analysis.totalSize}`,
         `${symbols.lightning} Gzipped: ${analysis.gzippedSize}`,
         `${symbols.sparkles} ${analysis.chunkCount} optimized chunks`,
+        `${symbols.check} All caches cleared`,
       ],
       'green'
     );
@@ -99,7 +129,7 @@ export async function runBuild(args) {
       'Next Steps',
       [
         '1. Run npm run bloom:ssg for static generation',
-        '2. Test with npm run preview',
+        '2. Test with npm run bloom:preview',
         '3. Deploy the dist/ folder',
         '4. Monitor performance in production',
       ],

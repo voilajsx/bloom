@@ -81,14 +81,21 @@ export function BloomLayoutWrapper({
     navigate(href);
   };
   
-  // App configuration
+
+  
+  // App configuration with debug
+  const detectedTheme = defaults['app-theme'] || 'neon';
+  console.log('🔍 [THEME DEBUG] Final detected theme:', detectedTheme);
+  
   const appConfig = {
-    theme: defaults['app-theme'] || 'studio',
+    theme: detectedTheme,
     mode: defaults['app-mode'] || 'light',
     title: defaults['app-name'] || 'Bloom App',
   };
+  
+  console.log('🔍 [THEME DEBUG] Final appConfig:', appConfig);
 
-  // Debug log
+  // Debug log for navigation
   if (process.env.NODE_ENV === 'development') {
     console.log('🌸 Navigation Debug:', {
       currentPath: location.pathname,

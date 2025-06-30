@@ -22,7 +22,7 @@ const defaults = {
   // Server Configuration
   'host': 'localhost',
   'port': 3000,
-  'base-path': '/new',
+  'base-path': '/sample',
 
   // Build Configuration
   'build-out-dir': 'dist',
