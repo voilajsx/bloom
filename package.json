@@ -13,6 +13,8 @@
     "voilajsx"
   ],
   "scripts": {
+    "build": "npm run bloom:build",
+    "dev": "npm run bloom:dev",
     "bloom": "node scripts/bloom.js",
     "bloom:dev": "node scripts/bloom.js dev",
     "bloom:build": "node scripts/bloom.js build",
